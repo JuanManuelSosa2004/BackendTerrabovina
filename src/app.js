@@ -6,7 +6,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
-// app.use('/api/...', require('./routes/...'));
+app.use('/estancias', require('./routes/estancia.routes'));
+app.use('/potreros', require('./routes/potrero.routes'));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

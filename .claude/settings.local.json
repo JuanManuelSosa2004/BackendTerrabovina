@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\juanm\\\\Desktop\\\\Backend Terrabovina\" -Force | ForEach-Object { $_.FullName })"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\juanm\\\\Desktop\\\\Backend Terrabovina\" -Force | ForEach-Object { $_.FullName })",
+      "Bash(docker exec *)",
+      "Bash(npm run *)",
+      "Bash(powershell -NoProfile -Command \"Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique\")",
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 27776 -Force\")",
+      "Bash(curl *)",
+      "Bash(powershell -NoProfile -Command \"Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object OwningProcess; Get-Process -Id \\(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue\\).OwningProcess -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,StartTime\")"
     ]
   }
 }
