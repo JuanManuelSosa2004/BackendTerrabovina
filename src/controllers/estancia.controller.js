@@ -2,14 +2,7 @@
 
 const estanciaRepository = require('../database/sql/estancia.repository');
 const { setEstanciaGeom } = require('../database/sql/geometry.repository');
-
-function isDuplicateEntryError(error) {
-  return (
-    error.name === 'SequelizeUniqueConstraintError' ||
-    error?.parent?.code === 'ER_DUP_ENTRY' ||
-    error?.original?.code === 'ER_DUP_ENTRY'
-  );
-}
+const { isDuplicateEntryError } = require('../utils/dbErrors');
 
 async function create(req, res) {
   const { id_usuario, nombre, departamento, provincia, superficie_total_ha } = req.body;
