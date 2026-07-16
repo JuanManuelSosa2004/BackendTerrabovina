@@ -20,6 +20,23 @@ const samplePolygon = {
   ],
 };
 
+// Debe quedar dentro del triángulo en que termina el geom de la estancia
+// luego del test "cierra automáticamente un anillo que llega abierto"
+// ([-60,-34], [-59.9,-34], [-59.9,-33.9]), que es el que persiste en la
+// base de datos para cuando corren los tests de Potrero.
+const potreroPolygon = {
+  type: 'Polygon',
+  coordinates: [
+    [
+      [-59.95, -33.99],
+      [-59.92, -33.99],
+      [-59.92, -33.96],
+      [-59.95, -33.96],
+      [-59.95, -33.99],
+    ],
+  ],
+};
+
 let usuarioId;
 let estanciaId;
 let potreroId;
@@ -35,6 +52,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await sequelize.query('DELETE FROM potrero WHERE id_estancia = :estanciaId', {
+    replacements: { estanciaId },
+  });
+  await sequelize.query('DELETE FROM estancia WHERE id_usuario = :id', {
+    replacements: { id: usuarioId },
+  });
   await sequelize.query('DELETE FROM usuario WHERE id_usuario = :id', {
     replacements: { id: usuarioId },
   });
@@ -135,12 +158,12 @@ describe('Potrero', () => {
   });
 
   test('PATCH + GET conservan el polígono del potrero', async () => {
-    const patchRes = await request(app).patch(`/potreros/${potreroId}/geometria`).send(samplePolygon);
+    const patchRes = await request(app).patch(`/potreros/${potreroId}/geometria`).send(potreroPolygon);
     expect(patchRes.status).toBe(200);
 
     const getRes = await request(app).get(`/potreros/${potreroId}`);
     expect(getRes.status).toBe(200);
-    expect(getRes.body.geom).toEqual(samplePolygon);
+    expect(getRes.body.geom).toEqual(potreroPolygon);
   });
 });
 

@@ -13,29 +13,27 @@ async function create(req, res) {
     return res.status(400).json({ error: 'id_estancia y nombre son obligatorios.' });
   }
 
-  if (!geom) {
-    return res.status(400).json({ error: 'geom es obligatorio.' });
-  }
-
   let normalizedGeom;
-  try {
-    normalizedGeom = validateAndNormalizePolygon(geom);
-  } catch (error) {
-    return res.status(400).json({ error: error.message });
-  }
+  if (geom) {
+    try {
+      normalizedGeom = validateAndNormalizePolygon(geom);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
 
-  const inside = await isPolygonWithinEstancia(id_estancia, normalizedGeom);
-  if (!inside) {
-    return res.status(400).json({
-      error: 'El potrero debe quedar dentro de la estancia asociada.',
-    });
-  }
+    const inside = await isPolygonWithinEstancia(id_estancia, normalizedGeom);
+    if (!inside) {
+      return res.status(400).json({
+        error: 'El potrero debe quedar dentro de la estancia asociada.',
+      });
+    }
 
-  const overlaps = await hasPotreroOverlap(id_estancia, normalizedGeom);
-  if (overlaps) {
-    return res.status(400).json({
-      error: 'El potrero se solapa con otro potrero de la misma estancia.',
-    });
+    const overlaps = await hasPotreroOverlap(id_estancia, normalizedGeom);
+    if (overlaps) {
+      return res.status(400).json({
+        error: 'El potrero se solapa con otro potrero de la misma estancia.',
+      });
+    }
   }
 
   try {
@@ -83,6 +81,13 @@ async function updateGeometria(req, res) {
   if (!inside) {
     return res.status(400).json({
       error: 'El potrero debe quedar dentro de la estancia asociada.',
+    });
+  }
+
+  const overlaps = await hasPotreroOverlap(existing.id_estancia, normalized, existing.id_potrero);
+  if (overlaps) {
+    return res.status(400).json({
+      error: 'El potrero se solapa con otro potrero de la misma estancia.',
     });
   }
 
