@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const usuarioRepository = require('../database/sql/usuario.repository');
 const passwordResetTokenRepository = require('../database/sql/passwordResetToken.repository');
 const { isDuplicateEntryError } = require('../utils/dbErrors');
+const { sendPasswordResetEmail } = require('../services/mailer');
 
 const SALT_ROUNDS = 10;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -81,12 +82,7 @@ async function recuperarContrasena(req, res) {
 
     await passwordResetTokenRepository.createToken({ id_usuario: usuario.id_usuario, token_hash, expira_en });
 
-    // No hay proveedor de email configurado todavía: se deja constancia
-    // en el log en lugar de enviar el correo. Sustituir por un envío real
-    // (nodemailer u otro) sin tocar el resto del flujo.
-    console.log(
-      `[auth] Token de recuperación para ${usuario.email} (vence ${expira_en.toISOString()}): ${rawToken}`
-    );
+    await sendPasswordResetEmail({ to: usuario.email, rawToken, expiraEn: expira_en });
   }
 
   return res.status(200).json({ mensaje: 'Si el correo está registrado, se envió un enlace de recuperación.' });
