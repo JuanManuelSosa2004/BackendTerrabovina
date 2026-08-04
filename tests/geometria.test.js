@@ -20,22 +20,23 @@ const samplePolygon = {
   ],
 };
 
-// Debe quedar dentro del triangulo (-60,-34)-(-59.9,-34)-(-59.9,-33.9) al que
-// termina la estancia luego del test "cierra automaticamente un anillo...".
+// Debe quedar dentro del triángulo en que termina el geom de la estancia
+// luego del test "cierra automáticamente un anillo que llega abierto"
+// ([-60,-34], [-59.9,-34], [-59.9,-33.9]), que es el que persiste en la
+// base de datos para cuando corren los tests de Potrero.
 const potreroPolygon = {
   type: 'Polygon',
   coordinates: [
     [
-      [-59.935, -33.975],
-      [-59.925, -33.975],
-      [-59.925, -33.965],
-      [-59.935, -33.965],
-      [-59.935, -33.975],
+      [-59.95, -33.99],
+      [-59.92, -33.99],
+      [-59.92, -33.96],
+      [-59.95, -33.96],
+      [-59.95, -33.99],
     ],
   ],
 };
 
-let token;
 let usuarioId;
 let estanciaId;
 let potreroId;
@@ -59,9 +60,15 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await sequelize.query('DELETE FROM potrero WHERE id_estancia = :id', { replacements: { id: estanciaId } });
-  await sequelize.query('DELETE FROM estancia WHERE id_estancia = :id', { replacements: { id: estanciaId } });
-  await sequelize.query('DELETE FROM usuario WHERE id_usuario = :id', { replacements: { id: usuarioId } });
+  await sequelize.query('DELETE FROM potrero WHERE id_estancia = :estanciaId', {
+    replacements: { estanciaId },
+  });
+  await sequelize.query('DELETE FROM estancia WHERE id_usuario = :id', {
+    replacements: { id: usuarioId },
+  });
+  await sequelize.query('DELETE FROM usuario WHERE id_usuario = :id', {
+    replacements: { id: usuarioId },
+  });
   await sequelize.close();
 });
 
@@ -157,7 +164,7 @@ describe('Potrero', () => {
   });
 
   test('PATCH + GET conservan el polígono del potrero', async () => {
-    const patchRes = await auth(request(app).patch(`/api/v2/potrero/${potreroId}`)).send({ geom: potreroPolygon });
+    const patchRes = await request(app).patch(`/potreros/${potreroId}/geometria`).send(potreroPolygon);
     expect(patchRes.status).toBe(200);
 
     const getRes = await auth(request(app).get(`/api/v2/potrero/${potreroId}`));
