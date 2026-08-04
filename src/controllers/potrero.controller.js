@@ -2,7 +2,7 @@
 
 const potreroRepository = require('../database/sql/potrero.repository');
 const asignacionGanadoRepository = require('../database/sql/asignacionGanado.repository');
-const { setPotreroGeom } = require('../database/sql/geometry.repository');
+const { setPotreroGeom, assertValidPolygon } = require('../database/sql/geometry.repository');
 const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../database/sequelize');
 const { validateAndNormalizePolygon } = require('../database/sql/geometryValidation');
@@ -22,6 +22,7 @@ async function create(req, res) {
   let normalizedGeom;
   try {
     normalizedGeom = validateAndNormalizePolygon(geom);
+    await assertValidPolygon(normalizedGeom);
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
@@ -65,6 +66,7 @@ async function update(req, res) {
   if (geom !== undefined) {
     try {
       normalizedGeom = validateAndNormalizePolygon(geom);
+      await assertValidPolygon(normalizedGeom);
     } catch (error) {
       return res.status(400).json({ error: error.message });
     }

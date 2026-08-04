@@ -71,6 +71,34 @@ describe('Conexión', () => {
   });
 });
 
+describe('Estancia - usuario sin estancia', () => {
+  let otroToken;
+  let otroUsuarioId;
+
+  beforeAll(async () => {
+    await request(app).post('/api/v2/auth/registro').send({
+      nombre: 'Sin Estancia',
+      email: 'test-geom-sin-estancia@example.com',
+      password: 'password123',
+    });
+    const login = await request(app)
+      .post('/api/v2/auth/login')
+      .send({ email: 'test-geom-sin-estancia@example.com', password: 'password123' });
+    otroToken = login.body.token;
+    otroUsuarioId = login.body.usuario.id_usuario;
+  });
+
+  afterAll(async () => {
+    await sequelize.query('DELETE FROM usuario WHERE id_usuario = :id', { replacements: { id: otroUsuarioId } });
+  });
+
+  test('GET /api/v2/estancia devuelve 404 si el usuario no tiene estancia registrada', async () => {
+    const res = await request(app).get('/api/v2/estancia').set('Authorization', `Bearer ${otroToken}`);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('El usuario no tiene una estancia registrada.');
+  });
+});
+
 describe('Estancia', () => {
   test('POST /api/v2/estancia crea una estancia con su geometría', async () => {
     const res = await auth(request(app).post('/api/v2/estancia')).send({
@@ -163,6 +191,99 @@ describe('Potrero', () => {
     const getRes = await auth(request(app).get(`/api/v2/potrero/${potreroId}`));
     expect(getRes.status).toBe(200);
     expect(getRes.body.geom).toEqual(potreroPolygon);
+  });
+
+  test('GET /api/v2/estancia/:id/potrero lista los potreros de la estancia', async () => {
+    const res = await auth(request(app).get(`/api/v2/estancia/${estanciaId}/potrero`));
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id_potrero: potreroId, id_estancia: estanciaId })])
+    );
+  });
+});
+
+describe('Potrero - validaciones espaciales', () => {
+  test('POST /api/v2/estancia/:id/potrero rechaza un polígono auto-intersectante', async () => {
+    const bowtie = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [-59.93, -33.97],
+          [-59.92, -33.96],
+          [-59.92, -33.97],
+          [-59.93, -33.96],
+          [-59.93, -33.97],
+        ],
+      ],
+    };
+    const res = await auth(request(app).post(`/api/v2/estancia/${estanciaId}/potrero`)).send({
+      nombre: 'Potrero Bowtie',
+      superficie_ha: 1,
+      geom: bowtie,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('POST /api/v2/estancia/:id/potrero rechaza un polígono fuera de la estancia', async () => {
+    const fueraDeEstancia = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [-58, -34],
+          [-57.9, -34],
+          [-57.9, -33.9],
+          [-58, -33.9],
+          [-58, -34],
+        ],
+      ],
+    };
+    const res = await auth(request(app).post(`/api/v2/estancia/${estanciaId}/potrero`)).send({
+      nombre: 'Potrero Afuera',
+      superficie_ha: 1,
+      geom: fueraDeEstancia,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('POST /api/v2/estancia/:id/potrero rechaza un polígono que se solapa con un potrero existente', async () => {
+    const res = await auth(request(app).post(`/api/v2/estancia/${estanciaId}/potrero`)).send({
+      nombre: 'Potrero Solapado',
+      superficie_ha: 1,
+      geom: potreroPolygon,
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('Estancia con potreros existentes', () => {
+  test('PATCH /api/v2/estancia/:id rechaza un polígono que deja afuera un potrero existente', async () => {
+    const shrunk = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [-58, -34],
+          [-57.9, -34],
+          [-57.9, -33.9],
+          [-58, -33.9],
+          [-58, -34],
+        ],
+      ],
+    };
+    const res = await auth(request(app).patch(`/api/v2/estancia/${estanciaId}`)).send({ geom: shrunk });
+    expect(res.status).toBe(400);
+    expect(res.body.potrerosAfectados).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id_potrero: potreroId })])
+    );
+  });
+});
+
+describe('Estancia - eliminación', () => {
+  test('DELETE /api/v2/estancia/:id devuelve 409 si tiene potreros y no se confirma', async () => {
+    const res = await auth(request(app).delete(`/api/v2/estancia/${estanciaId}`));
+    expect(res.status).toBe(409);
+    expect(res.body.requiresConfirmation).toBe(true);
+    expect(res.body.potrerosAfectados).toBeGreaterThan(0);
   });
 });
 

@@ -3,7 +3,7 @@
 const estanciaRepository = require('../database/sql/estancia.repository');
 const potreroRepository = require('../database/sql/potrero.repository');
 const ganadoRepository = require('../database/sql/ganado.repository');
-const { setEstanciaGeom } = require('../database/sql/geometry.repository');
+const { setEstanciaGeom, assertValidPolygon } = require('../database/sql/geometry.repository');
 const { validateAndNormalizePolygon } = require('../database/sql/geometryValidation');
 const { sequelize } = require('../database/sequelize');
 const { QueryTypes } = require('sequelize');
@@ -24,6 +24,7 @@ async function create(req, res) {
   let normalizedGeom;
   try {
     normalizedGeom = validateAndNormalizePolygon(geom);
+    await assertValidPolygon(normalizedGeom);
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
@@ -71,8 +72,17 @@ async function update(req, res) {
   if (geom !== undefined) {
     try {
       normalizedGeom = validateAndNormalizePolygon(geom);
+      await assertValidPolygon(normalizedGeom);
     } catch (error) {
       return res.status(400).json({ error: error.message });
+    }
+
+    const potrerosFuera = await getPotrerosFueraDeGeom(req.estancia.id_estancia, normalizedGeom);
+    if (potrerosFuera.length > 0) {
+      return res.status(400).json({
+        error: 'El nuevo polígono de la estancia debe contener a todos sus potreros existentes.',
+        potrerosAfectados: potrerosFuera,
+      });
     }
   }
 
@@ -140,6 +150,21 @@ async function remove(req, res) {
   });
 
   return res.json({ deleted: true, potrerosEliminados: potreros.length, ganadoEliminado: ganado.length });
+}
+
+// Potreros cuya geometría quedaría fuera del nuevo polígono de la estancia
+// (mismo criterio ST_Within que usa potrero.controller.js al crear/mover un
+// potrero, aplicado acá en el sentido inverso).
+async function getPotrerosFueraDeGeom(idEstancia, polygon) {
+  const rows = await sequelize.query(
+    `SELECT id_potrero, nombre
+     FROM \`potrero\`
+     WHERE id_estancia = :idEstancia
+       AND geom IS NOT NULL
+       AND NOT ST_Within(geom, ST_GeomFromGeoJSON(:geojson, 1, 4326))`,
+    { replacements: { idEstancia, geojson: JSON.stringify(polygon) }, type: QueryTypes.SELECT }
+  );
+  return rows;
 }
 
 module.exports = { create, getMine, getById, update, remove };

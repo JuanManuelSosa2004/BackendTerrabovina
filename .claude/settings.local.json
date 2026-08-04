@@ -53,7 +53,8 @@
       "Bash(DB_HOST=127.0.0.1 DB_PORT=3306 DB_NAME=terrabovina_db DB_USER=root DB_PASSWORD=root_pass DB_ROOT_USER=root DB_ROOT_PASSWORD=root_pass DB_NAME_TEST=terrabovina_doctor_check npx jest --runInBand)",
       "Bash(npm test *)",
       "Bash(npx sequelize-cli *)",
-      "Bash(npx jest *)"
+      "Bash(npx jest *)",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft/Edge/Application/msedge.exe\" --headless --disable-gpu --no-pdf-header-footer --print-to-pdf=\"C:\\\\Users\\\\juanm\\\\Desktop\\\\Backend Terrabovina\\\\docs\\\\endpoints-estancia-potrero-geometria.pdf\" \"C:\\\\Users\\\\juanm\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-juanm-Desktop-Backend-Terrabovina\\\\f8898c10-d38d-4e49-ba23-bf7a819f3fe8\\\\scratchpad\\\\endpoints-geometria.html\")"
     ]
   }
 }
