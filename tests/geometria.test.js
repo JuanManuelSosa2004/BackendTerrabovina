@@ -37,6 +37,7 @@ const potreroPolygon = {
   ],
 };
 
+let token;
 let usuarioId;
 let estanciaId;
 let potreroId;
@@ -192,7 +193,7 @@ describe('Potrero', () => {
   });
 
   test('PATCH + GET conservan el polígono del potrero', async () => {
-    const patchRes = await request(app).patch(`/potreros/${potreroId}/geometria`).send(potreroPolygon);
+    const patchRes = await auth(request(app).patch(`/api/v2/potrero/${potreroId}`)).send({ geom: potreroPolygon });
     expect(patchRes.status).toBe(200);
 
     const getRes = await auth(request(app).get(`/api/v2/potrero/${potreroId}`));

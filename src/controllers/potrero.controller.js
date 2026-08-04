@@ -12,27 +12,33 @@ async function create(req, res) {
   const { nombre, descripcion, superficie_ha, activo, geom } = req.body ?? {};
   const id_estancia = req.estancia.id_estancia;
 
+  if (!nombre) {
+    return res.status(400).json({ error: 'nombre es obligatorio.' });
+  }
+  if (!geom) {
+    return res.status(400).json({ error: 'geom es obligatorio.' });
+  }
+
   let normalizedGeom;
-  if (geom) {
-    try {
-      normalizedGeom = validateAndNormalizePolygon(geom);
-    } catch (error) {
-      return res.status(400).json({ error: error.message });
-    }
+  try {
+    normalizedGeom = validateAndNormalizePolygon(geom);
+    await assertValidPolygon(normalizedGeom);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
 
-    const inside = await isPolygonWithinEstancia(id_estancia, normalizedGeom);
-    if (!inside) {
-      return res.status(400).json({
-        error: 'El potrero debe quedar dentro de la estancia asociada.',
-      });
-    }
+  const inside = await isPolygonWithinEstancia(id_estancia, normalizedGeom);
+  if (!inside) {
+    return res.status(400).json({
+      error: 'El potrero debe quedar dentro de la estancia asociada.',
+    });
+  }
 
-    const overlaps = await hasPotreroOverlap(id_estancia, normalizedGeom);
-    if (overlaps) {
-      return res.status(400).json({
-        error: 'El potrero se solapa con otro potrero de la misma estancia.',
-      });
-    }
+  const overlaps = await hasPotreroOverlap(id_estancia, normalizedGeom);
+  if (overlaps) {
+    return res.status(400).json({
+      error: 'El potrero se solapa con otro potrero de la misma estancia.',
+    });
   }
 
   const potrero = await potreroRepository.createPotrero({ id_estancia, nombre, descripcion, superficie_ha, activo });
@@ -116,19 +122,13 @@ async function remove(req, res) {
     });
   }
 
-  const overlaps = await hasPotreroOverlap(existing.id_estancia, normalized, existing.id_potrero);
-  if (overlaps) {
-    return res.status(400).json({
-      error: 'El potrero se solapa con otro potrero de la misma estancia.',
-    });
-  }
+  await sequelize.transaction(async (t) => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    await asignacionGanadoRepository.cerrarAsignacionesActivasDePotrero(id_potrero, hoy, 'FINALIZADA', t);
+    await potreroRepository.updatePotrero(id_potrero, { activo: false }, t);
+  });
 
-  try {
-    const geom = await setPotreroGeom(req.params.id, normalized);
-    return res.json({ id_potrero: Number(req.params.id), geom });
-  } catch (error) {
-    return res.status(400).json({ error: error.message });
-  }
+  return res.json({ deleted: true, animalesDesvinculados: asignacionesActivas.length });
 }
 
 async function isPolygonWithinEstancia(idEstancia, polygon) {
