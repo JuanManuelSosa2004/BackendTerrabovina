@@ -8,4 +8,12 @@ function isDuplicateEntryError(error) {
   );
 }
 
-module.exports = { isDuplicateEntryError };
+function isForeignKeyConstraintError(error) {
+  return (
+    error.name === 'SequelizeForeignKeyConstraintError' ||
+    error?.parent?.code === 'ER_ROW_IS_REFERENCED_2' ||
+    error?.original?.code === 'ER_ROW_IS_REFERENCED_2'
+  );
+}
+
+module.exports = { isDuplicateEntryError, isForeignKeyConstraintError };

@@ -9,7 +9,7 @@ const Ganado = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
-    id_rodeo: {
+    id_estancia: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
@@ -34,14 +34,26 @@ const Ganado = sequelize.define(
       type: DataTypes.DECIMAL(6, 2),
       allowNull: true,
     },
-    estado: {
-      type: DataTypes.ENUM('ACTIVO', 'VENDIDO', 'MUERTO'),
-      allowNull: false,
-      defaultValue: 'ACTIVO',
+    // Obligatoria a nivel de aplicación sólo para categoria === 'VACA'
+    // (única categoría con relevamiento sistemático de esta variable en el
+    // modelo de estimación de demanda, PFI §3.7.4). Ver validación en
+    // ganado.controller.js.
+    condicion_corporal: {
+      type: DataTypes.DECIMAL(3, 1),
+      allowNull: true,
+    },
+    estado_fisiologico: {
+      type: DataTypes.ENUM('N', 'L', 'P', 'B', 'P/L', 'B/L', 'N/P', 'DESCONOCIDO'),
+      allowNull: true,
     },
     observaciones: {
       type: DataTypes.STRING(500),
       allowNull: true,
+    },
+    activo: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
     },
   },
   {

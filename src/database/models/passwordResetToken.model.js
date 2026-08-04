@@ -1,36 +1,39 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../sequelize');
 
-const ZonaPotrero = sequelize.define(
-  'ZonaPotrero',
+const PasswordResetToken = sequelize.define(
+  'PasswordResetToken',
   {
-    id_zona_potrero: {
+    id_token: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
     },
-    id_potrero: {
+    id_usuario: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
-    tipo: {
-      type: DataTypes.ENUM('PASTO', 'SOMBRA', 'AGUA'),
+    token_hash: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      unique: true,
+    },
+    expira_en: {
+      type: DataTypes.DATE,
       allowNull: false,
     },
-    preferencia: {
-      type: DataTypes.ENUM('ALTA', 'MEDIA', 'BAJA'),
-      allowNull: false,
-    },
-    geom: {
-      type: DataTypes.GEOMETRY('POLYGON', 4326),
+    usado_en: {
+      type: DataTypes.DATE,
       allowNull: true,
     },
   },
   {
-    tableName: 'zona_potrero',
+    tableName: 'password_reset_token',
     timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: false,
     underscored: true,
   }
 );
 
-module.exports = ZonaPotrero;
+module.exports = PasswordResetToken;

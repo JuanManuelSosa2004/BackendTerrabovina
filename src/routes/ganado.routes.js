@@ -2,12 +2,16 @@
 
 const express = require('express');
 const controller = require('../controllers/ganado.controller');
+const { requireAuth } = require('../middlewares/auth.middleware');
+const { requireGanadoOwnership } = require('../middlewares/ownership.middleware');
 
 const router = express.Router();
+router.use(requireAuth);
+router.use('/:ganadoId', requireGanadoOwnership());
 
-router.post('/', controller.create);
-router.get('/:id', controller.getById);
-router.patch('/:id', controller.update);
-router.patch('/:id/rodeo', controller.updateRodeo);
+// #20, #21
+router.get('/:ganadoId', controller.getById);
+router.patch('/:ganadoId', controller.update);
+router.delete('/:ganadoId', controller.remove);
 
 module.exports = router;
