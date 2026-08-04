@@ -20,24 +20,48 @@ const samplePolygon = {
   ],
 };
 
+// Debe quedar dentro del triangulo (-60,-34)-(-59.9,-34)-(-59.9,-33.9) al que
+// termina la estancia luego del test "cierra automaticamente un anillo...".
+const potreroPolygon = {
+  type: 'Polygon',
+  coordinates: [
+    [
+      [-59.935, -33.975],
+      [-59.925, -33.975],
+      [-59.925, -33.965],
+      [-59.935, -33.965],
+      [-59.935, -33.975],
+    ],
+  ],
+};
+
+let token;
 let usuarioId;
 let estanciaId;
 let potreroId;
 
+function auth(req) {
+  return req.set('Authorization', `Bearer ${token}`);
+}
+
 beforeAll(async () => {
   await sequelize.authenticate();
-  const [insertId] = await sequelize.query(
-    `INSERT INTO usuario (nombre, email, password_hash, created_at, updated_at)
-     VALUES ('Test User', 'test-geom@example.com', 'x', NOW(), NOW())`,
-    { type: QueryTypes.INSERT }
-  );
-  usuarioId = insertId;
+  await request(app).post('/api/v2/auth/registro').send({
+    nombre: 'Test User',
+    email: 'test-geom@example.com',
+    password: 'password123',
+  });
+  const login = await request(app)
+    .post('/api/v2/auth/login')
+    .send({ email: 'test-geom@example.com', password: 'password123' });
+  token = login.body.token;
+  usuarioId = login.body.usuario.id_usuario;
 });
 
 afterAll(async () => {
-  await sequelize.query('DELETE FROM usuario WHERE id_usuario = :id', {
-    replacements: { id: usuarioId },
-  });
+  await sequelize.query('DELETE FROM potrero WHERE id_estancia = :id', { replacements: { id: estanciaId } });
+  await sequelize.query('DELETE FROM estancia WHERE id_estancia = :id', { replacements: { id: estanciaId } });
+  await sequelize.query('DELETE FROM usuario WHERE id_usuario = :id', { replacements: { id: usuarioId } });
   await sequelize.close();
 });
 
@@ -48,29 +72,22 @@ describe('Conexión', () => {
 });
 
 describe('Estancia', () => {
-  test('POST /estancias crea una estancia sin geometría', async () => {
-    const res = await request(app).post('/estancias').send({
-      id_usuario: usuarioId,
+  test('POST /api/v2/estancia crea una estancia con su geometría', async () => {
+    const res = await auth(request(app).post('/api/v2/estancia')).send({
       nombre: 'Estancia Test',
       departamento: 'Depto',
       provincia: 'Provincia',
       superficie_total_ha: 120.5,
+      geom: samplePolygon,
     });
     expect(res.status).toBe(201);
     expect(res.body.id_estancia).toBeDefined();
-    expect(res.body.geom).toBeNull();
+    expect(res.body.geom).toEqual(samplePolygon);
     estanciaId = res.body.id_estancia;
   });
 
-  test('PATCH /estancias/:id/geometria persiste el POLYGON', async () => {
-    const res = await request(app).patch(`/estancias/${estanciaId}/geometria`).send(samplePolygon);
-    expect(res.status).toBe(200);
-    expect(res.body.geom.type).toBe('Polygon');
-    expect(res.body.geom.coordinates[0]).toHaveLength(5);
-  });
-
-  test('GET /estancias/:id recupera el mismo polígono como GeoJSON', async () => {
-    const res = await request(app).get(`/estancias/${estanciaId}`);
+  test('GET /api/v2/estancia/:id recupera el mismo polígono como GeoJSON', async () => {
+    const res = await auth(request(app).get(`/api/v2/estancia/${estanciaId}`));
     expect(res.status).toBe(200);
     expect(res.body.geom).toEqual(samplePolygon);
   });
@@ -86,7 +103,7 @@ describe('Estancia', () => {
         ],
       ],
     };
-    const res = await request(app).patch(`/estancias/${estanciaId}/geometria`).send(open);
+    const res = await auth(request(app).patch(`/api/v2/estancia/${estanciaId}`)).send({ geom: open });
     expect(res.status).toBe(200);
     const ring = res.body.geom.coordinates[0];
     expect(ring[0]).toEqual(ring[ring.length - 1]);
@@ -105,29 +122,34 @@ describe('Estancia', () => {
         ],
       ],
     };
-    const res = await request(app).patch(`/estancias/${estanciaId}/geometria`).send(invalid);
+    const res = await auth(request(app).patch(`/api/v2/estancia/${estanciaId}`)).send({ geom: invalid });
     expect(res.status).toBe(400);
   });
 
   test('rechaza un GeoJSON que no es Polygon', async () => {
-    const res = await request(app)
-      .patch(`/estancias/${estanciaId}/geometria`)
-      .send({ type: 'Point', coordinates: [1, 2] });
+    const res = await auth(request(app).patch(`/api/v2/estancia/${estanciaId}`)).send({
+      geom: { type: 'Point', coordinates: [1, 2] },
+    });
     expect(res.status).toBe(400);
   });
 
-  test('GET /estancias/:id devuelve 404 para un id inexistente', async () => {
-    const res = await request(app).get('/estancias/999999');
+  test('GET /api/v2/estancia/:id devuelve 404 para un id inexistente', async () => {
+    const res = await auth(request(app).get('/api/v2/estancia/999999'));
     expect(res.status).toBe(404);
+  });
+
+  test('sin token de sesión devuelve 401', async () => {
+    const res = await request(app).get(`/api/v2/estancia/${estanciaId}`);
+    expect(res.status).toBe(401);
   });
 });
 
 describe('Potrero', () => {
-  test('POST /potreros crea un potrero asociado a la estancia', async () => {
-    const res = await request(app).post('/potreros').send({
-      id_estancia: estanciaId,
+  test('POST /api/v2/estancia/:id/potrero crea un potrero asociado a la estancia', async () => {
+    const res = await auth(request(app).post(`/api/v2/estancia/${estanciaId}/potrero`)).send({
       nombre: 'Potrero Test',
       superficie_ha: 10,
+      geom: potreroPolygon,
     });
     expect(res.status).toBe(201);
     expect(res.body.id_estancia).toBe(estanciaId);
@@ -135,12 +157,12 @@ describe('Potrero', () => {
   });
 
   test('PATCH + GET conservan el polígono del potrero', async () => {
-    const patchRes = await request(app).patch(`/potreros/${potreroId}/geometria`).send(samplePolygon);
+    const patchRes = await auth(request(app).patch(`/api/v2/potrero/${potreroId}`)).send({ geom: potreroPolygon });
     expect(patchRes.status).toBe(200);
 
-    const getRes = await request(app).get(`/potreros/${potreroId}`);
+    const getRes = await auth(request(app).get(`/api/v2/potrero/${potreroId}`));
     expect(getRes.status).toBe(200);
-    expect(getRes.body.geom).toEqual(samplePolygon);
+    expect(getRes.body.geom).toEqual(potreroPolygon);
   });
 });
 

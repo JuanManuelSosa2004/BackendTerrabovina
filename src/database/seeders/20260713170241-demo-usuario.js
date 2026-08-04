@@ -1,6 +1,8 @@
 'use strict';
 
 const DEMO_EMAIL = 'admin@terrabovina.com';
+// Contraseña en claro: DemoTerrabovina123 (sólo para este seed de desarrollo).
+const DEMO_PASSWORD_HASH = '$2b$10$zHHPq0uQ54xZdkXp7Nd0W.reEr3cYezoJzZub9UyngJC60uLDaeKO';
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
@@ -9,10 +11,7 @@ module.exports = {
       {
         nombre: 'Administrador Demo',
         email: DEMO_EMAIL,
-        // Placeholder: no hay lógica de hashing de contraseñas en el alcance
-        // de esta migración; reemplazar por un hash real antes de usar en un
-        // entorno real.
-        password_hash: 'CAMBIAR_ESTE_HASH',
+        password_hash: DEMO_PASSWORD_HASH,
         telefono: null,
         ultimo_acceso: null,
         created_at: new Date(),

@@ -50,7 +50,6 @@ function buildGeometryRepository(tableName, idColumn) {
 
 const estanciaGeom = buildGeometryRepository('estancia', 'id_estancia');
 const potreroGeom = buildGeometryRepository('potrero', 'id_potrero');
-const zonaPotreroGeom = buildGeometryRepository('zona_potrero', 'id_zona_potrero');
 
 module.exports = {
   getEstanciaGeom: estanciaGeom.getGeom,
@@ -60,8 +59,4 @@ module.exports = {
   getPotreroGeom: potreroGeom.getGeom,
   setPotreroGeom: potreroGeom.setGeom,
   deletePotreroGeom: potreroGeom.deleteGeom,
-
-  getZonaPotreroGeom: zonaPotreroGeom.getGeom,
-  setZonaPotreroGeom: zonaPotreroGeom.setGeom,
-  deleteZonaPotreroGeom: zonaPotreroGeom.deleteGeom,
 };

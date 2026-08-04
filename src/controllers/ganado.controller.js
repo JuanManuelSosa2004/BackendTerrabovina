@@ -1,7 +1,8 @@
 'use strict';
 
 const ganadoRepository = require('../database/sql/ganado.repository');
-const rodeoRepository = require('../database/sql/rodeo.repository');
+const asignacionGanadoRepository = require('../database/sql/asignacionGanado.repository');
+const { sequelize } = require('../database/sequelize');
 const { isDuplicateEntryError } = require('../utils/dbErrors');
 
 const UPDATABLE_FIELDS = [
@@ -10,42 +11,46 @@ const UPDATABLE_FIELDS = [
   'sexo',
   'categoria',
   'peso_kg',
-  'estado',
+  'condicion_corporal',
+  'estado_fisiologico',
   'observaciones',
 ];
 
-async function create(req, res) {
-  const {
-    id_rodeo,
-    numero_identificacion,
-    fecha_nacimiento,
-    sexo,
-    categoria,
-    peso_kg,
-    estado,
-    observaciones,
-  } = req.body;
+// CA011: categoría, peso vivo y número de identificación son obligatorios.
+// condicion_corporal es obligatoria sólo para categoria === 'VACA' (única
+// categoría relevada de forma sistemática para esa variable, ver
+// migración 20260801000001).
+function validarCamposGanado(body) {
+  const { numero_identificacion, sexo, categoria, peso_kg, condicion_corporal } = body ?? {};
+  if (!numero_identificacion || !sexo || !categoria || peso_kg === undefined) {
+    return 'numero_identificacion, sexo, categoria y peso_kg son obligatorios.';
+  }
+  if (categoria === 'VACA' && condicion_corporal === undefined) {
+    return 'condicion_corporal es obligatoria para categoria VACA.';
+  }
+  return null;
+}
 
-  if (!id_rodeo || !numero_identificacion || !sexo || !categoria) {
-    return res.status(400).json({
-      error: 'id_rodeo, numero_identificacion, sexo y categoria son obligatorios.',
-    });
+// #17: crea el animal sin potrero asignado.
+async function createEnEstancia(req, res) {
+  const errorValidacion = validarCamposGanado(req.body);
+  if (errorValidacion) {
+    return res.status(400).json({ error: errorValidacion });
   }
 
-  const rodeo = await rodeoRepository.getRodeoById(id_rodeo);
-  if (!rodeo) {
-    return res.status(400).json({ error: 'El rodeo indicado no existe.' });
-  }
+  const { numero_identificacion, fecha_nacimiento, sexo, categoria, peso_kg, condicion_corporal, estado_fisiologico, observaciones } =
+    req.body;
 
   try {
     const ganado = await ganadoRepository.createGanado({
-      id_rodeo,
+      id_estancia: req.estancia.id_estancia,
       numero_identificacion,
       fecha_nacimiento,
       sexo,
       categoria,
       peso_kg,
-      estado,
+      condicion_corporal,
+      estado_fisiologico,
       observaciones,
     });
     return res.status(201).json(ganado);
@@ -53,71 +58,111 @@ async function create(req, res) {
     if (isDuplicateEntryError(error)) {
       return res.status(409).json({ error: 'Ya existe un animal con ese numero_identificacion.' });
     }
-    return res.status(500).json({ error: 'Error al crear el animal.' });
+    throw error;
   }
 }
 
-async function getById(req, res) {
-  const ganado = await ganadoRepository.getGanadoById(req.params.id);
-  if (!ganado) {
-    return res.status(404).json({ error: 'Animal no encontrado.' });
+// #18: crea el animal y su primera asignación en la misma transacción
+// (docs/backend-gap-analysis.md §3, regla #18); id_estancia se deriva del
+// potrero, no se recibe del cliente.
+async function createEnPotrero(req, res) {
+  const errorValidacion = validarCamposGanado(req.body);
+  if (errorValidacion) {
+    return res.status(400).json({ error: errorValidacion });
   }
+
+  const { numero_identificacion, fecha_nacimiento, sexo, categoria, peso_kg, condicion_corporal, estado_fisiologico, observaciones } =
+    req.body;
+  const id_potrero = req.potrero.id_potrero;
+
+  try {
+    const ganado = await sequelize.transaction(async (t) => {
+      const nuevo = await ganadoRepository.createGanado(
+        {
+          id_estancia: req.potrero.id_estancia,
+          numero_identificacion,
+          fecha_nacimiento,
+          sexo,
+          categoria,
+          peso_kg,
+          condicion_corporal,
+          estado_fisiologico,
+          observaciones,
+        },
+        t
+      );
+      const hoy = new Date().toISOString().slice(0, 10);
+      await asignacionGanadoRepository.crearAsignacion(
+        { id_ganado: nuevo.id_ganado, id_potrero, fecha_desde: hoy, estado: 'ACTIVA' },
+        t
+      );
+      return nuevo;
+    });
+    return res.status(201).json(await ganadoRepository.getGanadoById(ganado.id_ganado));
+  } catch (error) {
+    if (isDuplicateEntryError(error)) {
+      return res.status(409).json({ error: 'Ya existe un animal con ese numero_identificacion.' });
+    }
+    throw error;
+  }
+}
+
+// #19
+async function listByEstancia(req, res) {
+  const ganado = await ganadoRepository.getGanadoByEstancia(req.estancia.id_estancia);
   return res.json(ganado);
 }
 
+// #20: requireGanadoOwnership ya validó pertenencia.
+async function getById(req, res) {
+  const ganado = await ganadoRepository.getGanadoById(req.ganado.id_ganado);
+  return res.json(ganado);
+}
+
+// No está en los 35 endpoints de la V2, pero sin ella no hay forma de
+// actualizar peso ni condición corporal, que son las entradas del modelo
+// de estimación de demanda (docs/backend-gap-analysis.md §5.4).
 async function update(req, res) {
-  const existing = await ganadoRepository.getGanadoById(req.params.id);
-  if (!existing) {
-    return res.status(404).json({ error: 'Animal no encontrado.' });
+  const fields = {};
+  for (const key of UPDATABLE_FIELDS) {
+    if (req.body?.[key] !== undefined) fields[key] = req.body[key];
   }
-
-  const fields = UPDATABLE_FIELDS.reduce((acc, key) => {
-    if (req.body[key] !== undefined) acc[key] = req.body[key];
-    return acc;
-  }, {});
-
   if (Object.keys(fields).length === 0) {
     return res.status(400).json({ error: 'No hay campos para actualizar.' });
   }
 
   try {
-    const ganado = await ganadoRepository.updateGanado(req.params.id, fields);
+    const ganado = await ganadoRepository.updateGanado(req.ganado.id_ganado, fields);
     return res.json(ganado);
   } catch (error) {
     if (isDuplicateEntryError(error)) {
       return res.status(409).json({ error: 'Ya existe un animal con ese numero_identificacion.' });
     }
-    return res.status(500).json({ error: 'Error al actualizar el animal.' });
+    throw error;
   }
 }
 
-async function updateRodeo(req, res) {
-  const existing = await ganadoRepository.getGanadoById(req.params.id);
-  if (!existing) {
-    return res.status(404).json({ error: 'Animal no encontrado.' });
-  }
+// #21: baja lógica; si el animal tenía una asignación activa, se cierra
+// en la misma transacción (docs/backend-gap-analysis.md §5.3).
+async function remove(req, res) {
+  const id_ganado = req.ganado.id_ganado;
 
-  const { id_rodeo } = req.body;
-  if (!id_rodeo) {
-    return res.status(400).json({ error: 'id_rodeo es obligatorio.' });
-  }
+  await sequelize.transaction(async (t) => {
+    const asignacionActiva = await asignacionGanadoRepository.getAsignacionActivaByGanado(id_ganado, t);
+    if (asignacionActiva) {
+      const hoy = new Date().toISOString().slice(0, 10);
+      await asignacionGanadoRepository.cerrarAsignacion(asignacionActiva.id_asignacion, hoy, 'FINALIZADA', t);
+    }
+    await ganadoRepository.darDeBaja(id_ganado, t);
+  });
 
-  const [rodeoDestino, rodeoActual] = await Promise.all([
-    rodeoRepository.getRodeoById(id_rodeo),
-    rodeoRepository.getRodeoById(existing.id_rodeo),
-  ]);
+  return res.json({ deleted: true });
+}
 
-  if (!rodeoDestino) {
-    return res.status(400).json({ error: 'El rodeo destino no existe.' });
-  }
-  if (rodeoDestino.id_estancia !== rodeoActual.id_estancia) {
-    return res.status(400).json({
-      error: 'No se puede transferir el animal a un rodeo de otra estancia.',
-    });
-  }
-
-  const ganado = await ganadoRepository.updateGanadoRodeo(req.params.id, id_rodeo);
+// #22
+async function listByPotrero(req, res) {
+  const ganado = await ganadoRepository.getGanadoByPotrero(req.potrero.id_potrero);
   return res.json(ganado);
 }
 
-module.exports = { create, getById, update, updateRodeo };
+module.exports = { createEnEstancia, createEnPotrero, listByEstancia, getById, update, remove, listByPotrero };
