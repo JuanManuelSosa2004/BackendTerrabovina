@@ -67,9 +67,19 @@ async function updatePotrero(id, fields, transaction) {
   return getPotreroById(id, transaction);
 }
 
+// Usado al dar de baja una estancia (estancia.controller#remove): baja en
+// cascada de todos sus potreros todavía activos, en la misma transacción.
+async function darDeBajaTodosDeEstancia(id_estancia, transaction) {
+  await sequelize.query(
+    'UPDATE `potrero` SET activo = FALSE, updated_at = NOW() WHERE id_estancia = :id_estancia AND activo = TRUE',
+    { replacements: { id_estancia }, type: QueryTypes.UPDATE, transaction }
+  );
+}
+
 module.exports = {
   createPotrero,
   getPotreroById,
   getPotrerosByEstancia,
   updatePotrero,
+  darDeBajaTodosDeEstancia,
 };

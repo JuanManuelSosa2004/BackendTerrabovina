@@ -219,7 +219,11 @@ paths:
       tags: [Estancia]
       operationId: crearEstancia
       summary: Crear la estancia del usuario autenticado
-      description: Relación 1:1 con el usuario; una segunda llamada devuelve 409.
+      description: >-
+        A lo sumo una estancia *activa* por usuario: una segunda llamada
+        devuelve 409 mientras exista una activa. Si el usuario dio de baja
+        su estancia (`DELETE /estancia/{estanciaId}`), puede crear una
+        nueva.
       requestBody:
         required: true
         content:
@@ -313,31 +317,37 @@ paths:
     delete:
       tags: [Estancia]
       operationId: eliminarEstancia
-      summary: Eliminar la estancia (física, en cascada)
+      summary: Dar de baja la estancia (baja lógica, en cascada)
       description: >-
-        Borra la estancia y todo lo que dependa de ella (potreros, ganado,
-        asignaciones, traslados, estimaciones, recomendaciones). Requiere
-        `?confirm=true` si hay algo que se perdería.
+        Baja lógica, no DELETE físico (`activo = false`), igual que Potrero y
+        Ganado: da de baja en cascada sus potreros y su ganado todavía
+        activos y cierra las asignaciones vigentes de sus animales. No borra
+        ni modifica el historial (asignaciones ya cerradas, traslados,
+        estimaciones, recomendaciones), que queda intacto y consultable por
+        sus propios endpoints. Requiere `?confirm=true` si hay potreros y/o
+        ganado activos que se verían afectados. Tras la baja, el usuario
+        puede crear una estancia nueva (a lo sumo una estancia *activa* por
+        usuario, no una por usuario para siempre).
       parameters:
         - name: confirm
           in: query
           schema: { type: string, enum: ["true"] }
-          description: Confirma el borrado cuando hay potreros y/o ganado asociados
+          description: Confirma la baja cuando hay potreros y/o ganado activos asociados
       responses:
         "200":
-          description: Eliminada
+          description: Baja lógica aplicada
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   deleted: { type: boolean, example: true }
-                  potrerosEliminados: { type: integer }
-                  ganadoEliminado: { type: integer }
+                  potrerosEliminados: { type: integer, description: Potreros dados de baja en cascada }
+                  ganadoEliminado: { type: integer, description: Animales dados de baja en cascada }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: Requiere confirmación (hay potreros y/o ganado asociados)
+          description: Requiere confirmación (hay potreros y/o ganado activos asociados)
           content:
             application/json:
               schema:
@@ -1476,6 +1486,7 @@ components:
         provincia: { type: string, nullable: true }
         superficie_total_ha: { type: string, nullable: true, description: "DECIMAL(10,2) serializado como string por el driver" }
         geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
+        activo: { type: boolean }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 

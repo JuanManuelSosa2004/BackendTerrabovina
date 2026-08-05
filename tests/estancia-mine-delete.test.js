@@ -38,6 +38,13 @@ afterAll(async () => {
 
       if (estanciaIds.length > 0) {
         await sequelize.query(
+          'DELETE FROM traslado_ganado_detalle WHERE id_traslado IN (SELECT id_traslado FROM traslado_ganado WHERE id_estancia IN (:estanciaIds))',
+          { replacements: { estanciaIds } }
+        );
+        await sequelize.query('DELETE FROM traslado_ganado WHERE id_estancia IN (:estanciaIds)', {
+          replacements: { estanciaIds },
+        });
+        await sequelize.query(
           'DELETE FROM asignacion_ganado WHERE id_ganado IN (SELECT id_ganado FROM ganado WHERE id_estancia IN (:estanciaIds))',
           { replacements: { estanciaIds } }
         );
@@ -240,14 +247,132 @@ describe('DELETE /api/v2/estancia/:id', () => {
     const getEstancia = await auth(request(app).get(`/api/v2/estancia/${estanciaId}`), token);
     expect(getEstancia.status).toBe(404);
 
+    // Baja lógica, no DELETE físico (igual que dar de baja un potrero o un
+    // animal individualmente): potrero y ganado siguen siendo consultables,
+    // sólo que ahora inactivos.
     const getPotrero = await auth(request(app).get(`/api/v2/potrero/${potreroId}`), token);
-    expect(getPotrero.status).toBe(404);
+    expect(getPotrero.status).toBe(200);
+    expect(getPotrero.body.activo).toBeFalsy();
 
     const getGanado = await auth(request(app).get(`/api/v2/ganado/${ganado.body.id_ganado}`), token);
-    expect(getGanado.status).toBe(404);
+    expect(getGanado.status).toBe(200);
+    expect(getGanado.body.activo).toBeFalsy();
 
-    // Con la estancia eliminada, el usuario vuelve a estar "sin estancia".
+    // Con la estancia dada de baja, el usuario vuelve a estar "sin estancia".
     const getMine = await auth(request(app).get('/api/v2/estancia'), token);
     expect(getMine.status).toBe(404);
+  }, 15000);
+
+  test('tras la baja, el usuario puede crear una estancia nueva', async () => {
+    const { token, id_usuario } = await crearUsuarioConToken('test-estancia-del-recrear@example.com');
+    usuariosCreados.push(id_usuario);
+
+    const geom1 = polygon([
+      [-63.2, -37.7],
+      [-63.0, -37.7],
+      [-63.0, -37.5],
+      [-63.2, -37.5],
+      [-63.2, -37.7],
+    ]);
+    const primera = await auth(request(app).post('/api/v2/estancia'), token).send({
+      nombre: 'Primera Estancia',
+      geom: geom1,
+    });
+    expect(primera.status).toBe(201);
+
+    // Mientras está activa, no se puede crear una segunda.
+    const duplicada = await auth(request(app).post('/api/v2/estancia'), token).send({
+      nombre: 'Segunda Estancia',
+      geom: geom1,
+    });
+    expect(duplicada.status).toBe(409);
+
+    const baja = await auth(request(app).delete(`/api/v2/estancia/${primera.body.id_estancia}`), token);
+    expect(baja.status).toBe(200);
+
+    const geom2 = polygon([
+      [-63.5, -38.0],
+      [-63.3, -38.0],
+      [-63.3, -37.8],
+      [-63.5, -37.8],
+      [-63.5, -38.0],
+    ]);
+    const segunda = await auth(request(app).post('/api/v2/estancia'), token).send({
+      nombre: 'Estancia Después De La Baja',
+      geom: geom2,
+    });
+    expect(segunda.status).toBe(201);
+    expect(segunda.body.id_estancia).not.toBe(primera.body.id_estancia);
+
+    const getMine = await auth(request(app).get('/api/v2/estancia'), token);
+    expect(getMine.status).toBe(200);
+    expect(getMine.body.id_estancia).toBe(segunda.body.id_estancia);
+  });
+
+  test('con historial de traslados entre potreros, la baja no explota por la FK de traslado_ganado', async () => {
+    const { token, id_usuario } = await crearUsuarioConToken('test-estancia-del-traslado@example.com');
+    usuariosCreados.push(id_usuario);
+
+    const geomEstancia = polygon([
+      [-64.5, -39.0],
+      [-64.0, -39.0],
+      [-64.0, -38.5],
+      [-64.5, -38.5],
+      [-64.5, -39.0],
+    ]);
+    const estancia = await auth(request(app).post('/api/v2/estancia'), token).send({
+      nombre: 'Estancia Con Traslados',
+      geom: geomEstancia,
+    });
+    const estanciaId = estancia.body.id_estancia;
+
+    const potreroOrigen = await auth(request(app).post(`/api/v2/estancia/${estanciaId}/potrero`), token).send({
+      nombre: 'Origen',
+      geom: polygon([
+        [-64.45, -38.95],
+        [-64.35, -38.95],
+        [-64.35, -38.85],
+        [-64.45, -38.85],
+        [-64.45, -38.95],
+      ]),
+    });
+    const potreroDestino = await auth(request(app).post(`/api/v2/estancia/${estanciaId}/potrero`), token).send({
+      nombre: 'Destino',
+      geom: polygon([
+        [-64.25, -38.95],
+        [-64.15, -38.95],
+        [-64.15, -38.85],
+        [-64.25, -38.85],
+        [-64.25, -38.95],
+      ]),
+    });
+    expect(potreroOrigen.status).toBe(201);
+    expect(potreroDestino.status).toBe(201);
+
+    const ganado = await auth(request(app).post(`/api/v2/potrero/${potreroOrigen.body.id_potrero}/ganado`), token).send({
+      numero_identificacion: 'DEL-ESTANCIA-TRASLADO-001',
+      sexo: 'F',
+      categoria: 'VAQUILLONA',
+      peso_kg: 280,
+    });
+    expect(ganado.status).toBe(201);
+
+    const traslado = await auth(
+      request(app).post(`/api/v2/potrero/${potreroOrigen.body.id_potrero}/traslado-ganado`),
+      token
+    ).send({
+      id_potrero_destino: potreroDestino.body.id_potrero,
+      id_ganado: [ganado.body.id_ganado],
+      fecha_movimiento: new Date().toISOString(),
+    });
+    expect(traslado.status).toBe(201);
+
+    const res = await auth(request(app).delete(`/api/v2/estancia/${estanciaId}?confirm=true`), token);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ deleted: true, potrerosEliminados: 2, ganadoEliminado: 1 });
+
+    // El historial de traslados no se toca: sigue existiendo tal cual.
+    const getTraslado = await auth(request(app).get(`/api/v2/traslado-ganado/${traslado.body.id_traslado}`), token);
+    expect(getTraslado.status).toBe(200);
   }, 15000);
 });

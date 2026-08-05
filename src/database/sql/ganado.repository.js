@@ -142,6 +142,16 @@ async function darDeBaja(id, transaction) {
   });
 }
 
+// Usado al dar de baja una estancia (estancia.controller#remove): baja en
+// cascada de todo el ganado todavía activo, en la misma transacción. El
+// llamador es responsable de cerrar las asignaciones activas antes.
+async function darDeBajaTodosDeEstancia(id_estancia, transaction) {
+  await sequelize.query(
+    'UPDATE `ganado` SET activo = FALSE, updated_at = NOW() WHERE id_estancia = :id_estancia AND activo = TRUE',
+    { replacements: { id_estancia }, type: QueryTypes.UPDATE, transaction }
+  );
+}
+
 module.exports = {
   createGanado,
   getGanadoById,
@@ -150,4 +160,5 @@ module.exports = {
   getGanadoByPotrero,
   updateGanado,
   darDeBaja,
+  darDeBajaTodosDeEstancia,
 };

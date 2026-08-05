@@ -137,6 +137,18 @@ async function cerrarAsignacionesActivasDePotrero(id_potrero, fecha_hasta, estad
   );
 }
 
+// Variante en lote de cerrarAsignacionesActivasDePotrero, usada al dar de
+// baja una estancia entera (estancia.controller#remove): cierra de una
+// sola vez las asignaciones activas de todos sus potreros.
+async function cerrarAsignacionesActivasDePotreros(ids, fecha_hasta, estado, transaction) {
+  if (ids.length === 0) return;
+  await sequelize.query(
+    `UPDATE \`asignacion_ganado\` SET fecha_hasta = :fecha_hasta, estado = :estado, updated_at = NOW()
+     WHERE id_potrero IN (:ids) AND fecha_hasta IS NULL`,
+    { replacements: { ids, fecha_hasta, estado }, type: QueryTypes.UPDATE, transaction }
+  );
+}
+
 module.exports = {
   getAsignacionById,
   getAsignacionActivaByGanado,
@@ -147,4 +159,5 @@ module.exports = {
   crearAsignacion,
   cerrarAsignacion,
   cerrarAsignacionesActivasDePotrero,
+  cerrarAsignacionesActivasDePotreros,
 };

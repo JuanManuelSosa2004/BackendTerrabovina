@@ -12,10 +12,10 @@ const NOT_FOUND = { error: 'Recurso no encontrado.' };
 function requireEstanciaOwnership(paramName = 'estanciaId') {
   return async (req, res, next) => {
     const id = req.params[paramName];
-    const rows = await sequelize.query('SELECT id_estancia, id_usuario FROM `estancia` WHERE id_estancia = :id', {
-      replacements: { id },
-      type: QueryTypes.SELECT,
-    });
+    const rows = await sequelize.query(
+      'SELECT id_estancia, id_usuario FROM `estancia` WHERE id_estancia = :id AND activo = TRUE',
+      { replacements: { id }, type: QueryTypes.SELECT }
+    );
     const estancia = rows[0];
     if (!estancia || estancia.id_usuario !== req.usuario.id_usuario) {
       return res.status(404).json(NOT_FOUND);
