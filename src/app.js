@@ -1,9 +1,29 @@
 const path = require('path');
 const express = require('express');
+const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 
 const app = express();
+
+// Sin esto, cualquier frontend en un origen distinto (Railway, localhost en
+// otro puerto, etc.) recibe un preflight sin 'Access-Control-Allow-Origin'
+// y el navegador bloquea la request antes de que llegue acá — curl no lo
+// reproduce porque no hace preflight, por eso pasaba desapercibido en
+// pruebas manuales. CORS_ORIGINS (opcional, coma-separado) permite sumar
+// otros orígenes sin tocar código; FRONTEND_URL ya existía para el link
+// del mail de recuperación, se reutiliza acá con el mismo criterio.
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://pfi-front-production.up.railway.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+];
+const envOrigins = [process.env.FRONTEND_URL, ...(process.env.CORS_ORIGINS ?? '').split(',')]
+  .map((origin) => origin?.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+const allowedOrigins = [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...envOrigins])];
+
+app.use(cors({ origin: allowedOrigins }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
