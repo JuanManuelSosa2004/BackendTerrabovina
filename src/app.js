@@ -1,4 +1,7 @@
+const path = require('path');
 const express = require('express');
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
 
 const app = express();
 
@@ -13,6 +16,10 @@ app.use('/api/v2/potrero', require('./routes/potrero.routes'));
 app.use('/api/v2/ganado', require('./routes/ganado.routes'));
 app.use('/api/v2/asignacion-ganado', require('./routes/asignacionGanado.routes'));
 app.use('/api/v2/traslado-ganado', require('./routes/trasladoGanado.routes'));
+
+// Documentación pública (sin auth): Swagger UI sobre docs/openapi.yaml.
+const openapiSpec = YAML.load(path.join(__dirname, '..', 'docs', 'openapi.yaml'));
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
