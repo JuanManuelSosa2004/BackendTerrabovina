@@ -17,9 +17,15 @@ app.use('/api/v2/ganado', require('./routes/ganado.routes'));
 app.use('/api/v2/asignacion-ganado', require('./routes/asignacionGanado.routes'));
 app.use('/api/v2/traslado-ganado', require('./routes/trasladoGanado.routes'));
 
-// Documentación pública (sin auth): Swagger UI sobre docs/openapi.yaml.
-const openapiSpec = YAML.load(path.join(__dirname, '..', 'docs', 'openapi.yaml'));
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
+// Documentación pública (sin auth): Swagger UI sobre docs/openapi.yaml. Si
+// el archivo falta o no parsea, se loguea y se sigue sin montar /docs — la
+// documentación nunca debe poder tirar abajo la API real.
+try {
+  const openapiSpec = YAML.load(path.join(__dirname, '..', 'docs', 'openapi.yaml'));
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
+} catch (error) {
+  console.error('No se pudo cargar docs/openapi.yaml, /docs no estará disponible:', error.message);
+}
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

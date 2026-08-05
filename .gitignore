@@ -2,4 +2,10 @@ node_modules/
 .env
 
 .claude/
-docs/
+# app.js carga este archivo en runtime para servir /docs (Swagger UI): no
+# puede quedar afuera del repo o el deploy crashea al arrancar. Un patrón
+# "docs/" completo no permite des-ignorar nada adentro (git no puede
+# re-incluir un archivo si el directorio padre está excluido), por eso acá
+# se excluye archivo por archivo en vez de la carpeta entera.
+docs/*
+!docs/openapi.yaml

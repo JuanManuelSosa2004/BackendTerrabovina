@@ -1,0 +1,1635 @@
+openapi: 3.0.3
+info:
+  title: TerraBovina API
+  version: "2.0.0"
+  description: |
+    API REST de TerraBovina (V2): gestión de estancias, potreros y ganado con
+    geometría espacial (MySQL 8 / ST_*), asignación y traslado de animales
+    entre potreros, ingesta de NDVI/clima y estimaciones forrajera/nutricional
+    respaldadas por un modelo predictivo externo, y recomendaciones de manejo.
+
+    Todos los endpoints bajo `/api/v2` requieren `Authorization: Bearer <token>`
+    excepto `/auth/*`. Un recurso ajeno o inexistente siempre responde **404**
+    (nunca 403), para no revelar su existencia a otro usuario.
+  contact:
+    name: TerraBovina
+  license:
+    name: ISC
+    url: https://opensource.org/license/isc-license-txt
+servers:
+  - url: https://backendterrabovina-production.up.railway.app/api/v2
+    description: Producción
+  - url: http://localhost:3000/api/v2
+    description: Desarrollo local
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Registro, login y recuperación de contraseña. Sin autenticación.
+  - name: Usuario
+    description: Perfil del usuario autenticado.
+  - name: Estancia
+    description: Estancia del usuario (relación 1:1).
+  - name: Potrero
+    description: Potreros dentro de una estancia.
+  - name: Ganado
+    description: Animales de una estancia.
+  - name: AsignacionGanado
+    description: >-
+      Vigencia de "animal en potrero" (fecha_desde/fecha_hasta). POST sólo
+      cubre la primera asignación de un animal sin potrero; para mover un
+      animal ya asignado, usar TrasladoGanado.
+  - name: TrasladoGanado
+    description: >-
+      Evento operativo auditado de mover un lote de animales de un potrero
+      origen a un potrero destino (quién, cuándo, por qué).
+  - name: NDVIClima
+    description: >-
+      Lectura de la última observación satelital/climática persistida. No
+      generan datos por sí mismos: la ingesta ocurre en POST estimacion-forrajera.
+  - name: Estimaciones
+    description: Disponibilidad forrajera y demanda nutricional, calculadas por el modelo predictivo externo.
+  - name: Recomendaciones
+    description: Cruce de oferta y demanda de un potrero con una regla de umbrales.
+
+paths:
+  # ============================================================ AUTH ======
+  /auth/registro:
+    post:
+      tags: [Auth]
+      operationId: registrarUsuario
+      summary: Registrar un usuario nuevo
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, email, password]
+              properties:
+                nombre: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, format: password, minLength: 8 }
+                telefono: { type: string, nullable: true }
+      responses:
+        "201":
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario: { $ref: "#/components/schemas/Usuario" }
+                  mensaje: { type: string, example: "Registro completado." }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Iniciar sesión
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario: { $ref: "#/components/schemas/Usuario" }
+                  token: { type: string, description: JWT firmado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Credenciales inválidas (mensaje genérico, no revela si el email existe)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/recuperar-contrasena:
+    post:
+      tags: [Auth]
+      operationId: recuperarContrasena
+      summary: Solicitar recuperación de contraseña
+      description: >-
+        Respuesta idéntica exista o no la cuenta (RF016/CA026). Si existe,
+        genera un token de un solo uso y envía un email con el enlace.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: Solicitud procesada (genérico)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje: { type: string, example: "Si el correo está registrado, se envió un enlace de recuperación." }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /auth/restablecer-contrasena:
+    post:
+      tags: [Auth]
+      operationId: restablecerContrasena
+      summary: Restablecer contraseña con un token de recuperación
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string, description: Token recibido por email }
+                password: { type: string, format: password, minLength: 8 }
+      responses:
+        "200":
+          description: Contraseña actualizada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje: { type: string, example: "Contraseña actualizada." }
+        "400":
+          description: Datos inválidos o token inválido/vencido/ya usado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # =========================================================== USUARIO ====
+  /usuarios/me:
+    get:
+      tags: [Usuario]
+      operationId: obtenerUsuarioActual
+      summary: Datos del usuario autenticado
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Usuario" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [Usuario]
+      operationId: actualizarUsuarioActual
+      summary: Actualizar nombre/teléfono del usuario autenticado
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string }
+                telefono: { type: string, nullable: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Usuario" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ========================================================== ESTANCIA ====
+  /estancia:
+    post:
+      tags: [Estancia]
+      operationId: crearEstancia
+      summary: Crear la estancia del usuario autenticado
+      description: Relación 1:1 con el usuario; una segunda llamada devuelve 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, geom]
+              properties:
+                nombre: { type: string }
+                departamento: { type: string, nullable: true }
+                provincia: { type: string, nullable: true }
+                superficie_total_ha: { type: number, format: double, nullable: true }
+                geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
+      responses:
+        "201":
+          description: Estancia creada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Estancia" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: El usuario ya tiene una estancia asociada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [Estancia]
+      operationId: obtenerEstanciaPropia
+      summary: Estancia del usuario autenticado
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Estancia" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: El usuario no tiene una estancia registrada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /estancia/{estanciaId}:
+    parameters:
+      - $ref: "#/components/parameters/estanciaId"
+    get:
+      tags: [Estancia]
+      operationId: obtenerEstanciaPorId
+      summary: Estancia por id
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Estancia" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Estancia]
+      operationId: actualizarEstancia
+      summary: Actualizar la estancia (parcial)
+      description: >-
+        Si se envía `geom`, se revalida y se verifica que siga conteniendo a
+        todos los potreros existentes; si alguno queda afuera, 400 con el
+        detalle en `potrerosAfectados`.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string }
+                departamento: { type: string, nullable: true }
+                provincia: { type: string, nullable: true }
+                superficie_total_ha: { type: number, format: double, nullable: true }
+                geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Estancia" }
+        "400":
+          description: Geometría inválida, o deja afuera potreros existentes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PotrerosAfectadosError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Estancia]
+      operationId: eliminarEstancia
+      summary: Eliminar la estancia (física, en cascada)
+      description: >-
+        Borra la estancia y todo lo que dependa de ella (potreros, ganado,
+        asignaciones, traslados, estimaciones, recomendaciones). Requiere
+        `?confirm=true` si hay algo que se perdería.
+      parameters:
+        - name: confirm
+          in: query
+          schema: { type: string, enum: ["true"] }
+          description: Confirma el borrado cuando hay potreros y/o ganado asociados
+      responses:
+        "200":
+          description: Eliminada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean, example: true }
+                  potrerosEliminados: { type: integer }
+                  ganadoEliminado: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Requiere confirmación (hay potreros y/o ganado asociados)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requiresConfirmation: { type: boolean, example: true }
+                  message: { type: string }
+                  potrerosAfectados: { type: integer }
+                  ganadoAfectado: { type: integer }
+
+  /estancia/{estanciaId}/potrero:
+    parameters:
+      - $ref: "#/components/parameters/estanciaId"
+    post:
+      tags: [Potrero]
+      operationId: crearPotrero
+      summary: Crear un potrero dentro de la estancia
+      description: >-
+        La geometría debe quedar dentro de la estancia (`ST_Within`) y no
+        solaparse con otro potrero de la misma estancia (`ST_Intersects`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, geom]
+              properties:
+                nombre: { type: string }
+                descripcion: { type: string, nullable: true }
+                superficie_ha: { type: number, format: double, nullable: true }
+                activo: { type: boolean, default: true }
+                geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
+      responses:
+        "201":
+          description: Potrero creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Potrero" }
+        "400":
+          description: Falta nombre/geom, geometría inválida, fuera de la estancia, o solapada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      tags: [Potrero]
+      operationId: listarPotrerosDeEstancia
+      summary: Listar los potreros de la estancia
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Potrero" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /estancia/{estanciaId}/ganado:
+    parameters:
+      - $ref: "#/components/parameters/estanciaId"
+    post:
+      tags: [Ganado]
+      operationId: crearGanadoSinPotrero
+      summary: Alta de un animal sin potrero asignado
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GanadoInput" }
+      responses:
+        "201":
+          description: Animal creado (id_potrero_actual = null)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ganado" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: numero_identificacion duplicado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [Ganado]
+      operationId: listarGanadoDeEstancia
+      summary: Listar el ganado activo de la estancia
+      description: Incluye `id_potrero_actual`/`potrero_actual_nombre` resueltos por la asignación vigente, si tiene.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Ganado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /estancia/{estanciaId}/asignaciones-ganado:
+    parameters:
+      - $ref: "#/components/parameters/estanciaId"
+    get:
+      tags: [AsignacionGanado]
+      operationId: listarAsignacionesDeEstancia
+      summary: Histórico de asignaciones de la estancia
+      parameters:
+        - $ref: "#/components/parameters/filtroIdPotrero"
+        - $ref: "#/components/parameters/filtroIdGanado"
+        - $ref: "#/components/parameters/filtroVigente"
+        - $ref: "#/components/parameters/filtroDesde"
+        - $ref: "#/components/parameters/filtroHasta"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AsignacionGanado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /estancia/{estanciaId}/analiticas/traslado-ganado:
+    parameters:
+      - $ref: "#/components/parameters/estanciaId"
+    get:
+      tags: [TrasladoGanado]
+      operationId: obtenerAnaliticasTrasladoGanado
+      summary: Analíticas agregadas de traslados de la estancia
+      parameters:
+        - $ref: "#/components/parameters/filtroDesde"
+        - $ref: "#/components/parameters/filtroHasta"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrasladoGanadoAnaliticas" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # =========================================================== POTRERO ====
+  /potrero/{potreroId}:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    get:
+      tags: [Potrero]
+      operationId: obtenerPotreroPorId
+      summary: Potrero por id
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Potrero" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Potrero]
+      operationId: actualizarPotrero
+      summary: Actualizar un potrero (parcial)
+      description: >-
+        Si se envía `geom`, se revalida contra `ST_Within` (dentro de la
+        estancia) y `ST_Intersects` (sin solape con otro potrero, excluyéndose
+        a sí mismo).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string }
+                descripcion: { type: string, nullable: true }
+                superficie_ha: { type: number, format: double, nullable: true }
+                activo: { type: boolean }
+                geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Potrero" }
+        "400":
+          description: Geometría inválida, fuera de la estancia, o solapada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Potrero]
+      operationId: eliminarPotrero
+      summary: Dar de baja un potrero (baja lógica)
+      description: >-
+        No borra la fila: pone `activo=false` y cierra las asignaciones
+        vigentes de ganado en ese potrero. Requiere `?confirm=true` si hay
+        animales asignados.
+      parameters:
+        - name: confirm
+          in: query
+          schema: { type: string, enum: ["true"] }
+      responses:
+        "200":
+          description: Baja lógica aplicada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean, example: true }
+                  animalesDesvinculados: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Requiere confirmación (hay animales asignados)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requiresConfirmation: { type: boolean, example: true }
+                  message: { type: string }
+                  animalesAfectados: { type: integer }
+
+  /potrero/{potreroId}/ganado:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    post:
+      tags: [Ganado]
+      operationId: crearGanadoEnPotrero
+      summary: Alta de un animal ya asignado al potrero
+      description: Crea el animal y su primera AsignacionGanado (ACTIVA) en una sola transacción.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GanadoInput" }
+      responses:
+        "201":
+          description: Animal creado (id_potrero_actual = este potrero)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ganado" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: numero_identificacion duplicado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [Ganado]
+      operationId: listarGanadoVigenteDePotrero
+      summary: Ganado con asignación vigente en este potrero
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Ganado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /potrero/{potreroId}/asignaciones-ganado:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    get:
+      tags: [AsignacionGanado]
+      operationId: listarAsignacionesDePotrero
+      summary: Histórico de asignaciones de este potrero
+      description: A diferencia de `GET /potrero/{potreroId}/ganado`, incluye también las asignaciones ya cerradas.
+      parameters:
+        - $ref: "#/components/parameters/filtroIdGanado"
+        - $ref: "#/components/parameters/filtroVigente"
+        - $ref: "#/components/parameters/filtroDesde"
+        - $ref: "#/components/parameters/filtroHasta"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AsignacionGanado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /potrero/{potreroId}/ndvi:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    get:
+      tags: [NDVIClima]
+      operationId: obtenerNdviVigente
+      summary: Última observación satelital persistida
+      description: >-
+        Sólo lectura: no genera datos. 404 si el potrero nunca tuvo una
+        corrida de `POST .../estimacion-forrajera`.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ObservacionSatelital" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Potrero ajeno/inexistente, o sin observación todavía
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /potrero/{potreroId}/ndvi/consulta-rango:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    get:
+      tags: [NDVIClima]
+      operationId: obtenerNdviHistorico
+      summary: Histórico de NDVI por rango de fechas
+      parameters:
+        - $ref: "#/components/parameters/filtroDesde"
+        - $ref: "#/components/parameters/filtroHasta"
+      responses:
+        "200":
+          description: OK (arreglo vacío + mensaje si no hay datos en el rango)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  observaciones:
+                    type: array
+                    items: { $ref: "#/components/schemas/ObservacionSatelital" }
+                  mensaje: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /potrero/{potreroId}/dato-clima:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    get:
+      tags: [NDVIClima]
+      operationId: obtenerDatoClimaVigente
+      summary: Último dato climático persistido
+      description: >-
+        Sólo lectura: no genera datos. 404 si el potrero nunca tuvo una
+        corrida de `POST .../estimacion-forrajera`.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DatoClimatico" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Potrero ajeno/inexistente, o sin dato climático todavía
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /potrero/{potreroId}/estimacion-forrajera:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    post:
+      tags: [Estimaciones]
+      operationId: crearEstimacionForrajera
+      summary: Generar disponibilidad forrajera (modelo predictivo real)
+      description: >-
+        Llama a `POST /predict/dmp` del modelo predictivo externo (imagen
+        satelital + clima + predicción, todo en una respuesta) y persiste
+        ObservacionSatelital + DatoClimatico + DisponibilidadForrajera en una
+        transacción. Si el modelo no responde, no se persiste nada: la última
+        fila sigue siendo la vigente para los GET de NDVI/clima.
+      responses:
+        "201":
+          description: Disponibilidad forrajera calculada y persistida
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EstimacionForrajeraResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502":
+          description: El modelo predictivo no respondió o respondió con error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /potrero/{potreroId}/estimacion-forrajera/historico:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    get:
+      tags: [Estimaciones]
+      operationId: obtenerHistoricoForrajero
+      summary: Histórico de disponibilidad forrajera
+      parameters:
+        - $ref: "#/components/parameters/filtroDesde"
+        - $ref: "#/components/parameters/filtroHasta"
+      responses:
+        "200":
+          description: OK (arreglo vacío + mensaje si no hay datos en el rango)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disponibilidad:
+                    type: array
+                    items: { $ref: "#/components/schemas/DisponibilidadForrajera" }
+                  mensaje: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /potrero/{potreroId}/estimacion-nutricional:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    post:
+      tags: [Estimaciones]
+      operationId: crearEstimacionNutricional
+      summary: Generar demanda nutricional (modelo predictivo real)
+      description: >-
+        Arma el lote de animales con asignación vigente en el potrero, llama
+        a `POST /predict/dmi` del modelo predictivo externo (predicción por
+        animal) y persiste el agregado (suma de `dmi_kg_dia`) como una
+        EstimacionDemanda del potrero. `advertencias` y `predicciones` por
+        animal viajan en la respuesta pero no se persisten.
+      responses:
+        "201":
+          description: Demanda nutricional calculada y persistida
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EstimacionNutricionalResponse" }
+        "400":
+          description: El potrero no tiene animales con asignación vigente
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502":
+          description: El modelo predictivo no respondió o respondió con error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /potrero/{potreroId}/estimacion-nutricional/historico:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    get:
+      tags: [Estimaciones]
+      operationId: obtenerHistoricoNutricional
+      summary: Histórico de demanda nutricional
+      parameters:
+        - $ref: "#/components/parameters/filtroDesde"
+        - $ref: "#/components/parameters/filtroHasta"
+      responses:
+        "200":
+          description: OK (arreglo vacío + mensaje si no hay datos en el rango)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estimaciones:
+                    type: array
+                    items: { $ref: "#/components/schemas/EstimacionDemanda" }
+                  mensaje: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /potrero/{potreroId}/recomendacion:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    post:
+      tags: [Recomendaciones]
+      operationId: crearRecomendacion
+      summary: Generar una recomendación de manejo
+      description: >-
+        Cruza la última EstimacionDemanda y DisponibilidadForrajera vigentes
+        del potrero y aplica una regla de umbrales sobre "días de pastoreo
+        restantes". Exige que existan estimaciones previas de ambos tipos.
+      responses:
+        "201":
+          description: Recomendación generada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Recomendacion" }
+        "400":
+          description: Faltan estimaciones previas de demanda y/o disponibilidad
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      tags: [Recomendaciones]
+      operationId: listarRecomendaciones
+      summary: Listar recomendaciones del potrero
+      parameters:
+        - name: estado
+          in: query
+          schema: { $ref: "#/components/schemas/RecomendacionEstado" }
+        - name: vigente
+          in: query
+          description: "true = sólo estado PENDIENTE"
+          schema: { type: boolean }
+        - $ref: "#/components/parameters/filtroDesdeFechaGeneracion"
+        - $ref: "#/components/parameters/filtroHastaFechaGeneracion"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Recomendacion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /potrero/{potreroId}/traslado-ganado:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    post:
+      tags: [TrasladoGanado]
+      operationId: crearTrasladoGanado
+      summary: Trasladar un lote de animales desde este potrero (origen)
+      description: >-
+        Transacción única: crea la cabecera del traslado, y para cada animal
+        cierra la asignación en el potrero origen (FINALIZADA) y abre una
+        nueva en el potrero destino (ACTIVA), enlazando ambas en el detalle.
+        Si algún animal del lote es inválido, se hace rollback completo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_potrero_destino, id_ganado, fecha_movimiento]
+              properties:
+                id_potrero_destino: { type: integer }
+                id_ganado:
+                  type: array
+                  items: { type: integer }
+                  minItems: 1
+                  uniqueItems: true
+                fecha_movimiento: { type: string, format: date-time }
+                observaciones: { type: string, nullable: true }
+              example:
+                id_potrero_destino: 8
+                id_ganado: [12, 13, 14]
+                fecha_movimiento: "2026-08-04T14:30:00.000Z"
+                observaciones: "Rotación planificada"
+      responses:
+        "201":
+          description: Traslado registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrasladoGanadoDetalleResponse" }
+        "400":
+          description: >-
+            Datos inválidos: destino igual al origen, destino ajeno/de otra
+            estancia, id_ganado vacío/duplicado, o algún animal no existe /
+            es de otra estancia / no tiene asignación activa en el origen.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      tags: [TrasladoGanado]
+      operationId: listarTrasladosDePotrero
+      summary: Traslados que entraron o salieron de este potrero
+      parameters:
+        - name: direccion
+          in: query
+          required: true
+          schema: { type: string, enum: [entradas, salidas] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TrasladoGanado" }
+        "400":
+          description: direccion inválida o ausente
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # =========================================================== GANADO =====
+  /ganado/{ganadoId}:
+    parameters:
+      - $ref: "#/components/parameters/ganadoId"
+    get:
+      tags: [Ganado]
+      operationId: obtenerGanadoPorId
+      summary: Animal por id
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ganado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Ganado]
+      operationId: actualizarGanado
+      summary: Actualizar un animal (parcial)
+      description: No forma parte de los 35 endpoints originales de la V2; imprescindible para actualizar peso/condición corporal.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                numero_identificacion: { type: string }
+                fecha_nacimiento: { type: string, format: date, nullable: true }
+                sexo: { $ref: "#/components/schemas/GanadoSexo" }
+                categoria: { $ref: "#/components/schemas/GanadoCategoria" }
+                peso_kg: { type: number, format: double }
+                condicion_corporal: { type: number, format: double, nullable: true }
+                estado_fisiologico: { $ref: "#/components/schemas/GanadoEstadoFisiologico" }
+                observaciones: { type: string, nullable: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ganado" }
+        "400":
+          description: Body sin campos reconocidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: numero_identificacion duplicado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      tags: [Ganado]
+      operationId: eliminarGanado
+      summary: Dar de baja un animal (baja lógica)
+      description: Cierra la asignación activa del animal, si tenía una, en la misma transacción.
+      responses:
+        "200":
+          description: Baja lógica aplicada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean, example: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ganado/{ganadoId}/recorrido:
+    parameters:
+      - $ref: "#/components/parameters/ganadoId"
+    get:
+      tags: [TrasladoGanado]
+      operationId: obtenerRecorridoDeGanado
+      summary: Recorrido cronológico del animal a través de sus traslados
+      parameters:
+        - $ref: "#/components/parameters/filtroDesde"
+        - $ref: "#/components/parameters/filtroHasta"
+      responses:
+        "200":
+          description: OK, ordenado ascendente por fecha_movimiento
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RecorridoItem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ganado/{ganadoId}/asignaciones:
+    parameters:
+      - $ref: "#/components/parameters/ganadoId"
+    get:
+      tags: [AsignacionGanado]
+      operationId: listarAsignacionesDeGanado
+      summary: Histórico de asignaciones del animal (asignación a asignación)
+      description: Complementa a `GET /ganado/{ganadoId}/recorrido`, que es la vista traslado a traslado.
+      parameters:
+        - $ref: "#/components/parameters/filtroVigente"
+        - $ref: "#/components/parameters/filtroDesde"
+        - $ref: "#/components/parameters/filtroHasta"
+      responses:
+        "200":
+          description: OK, ordenado descendente por fecha_desde
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AsignacionGanado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ================================================ ASIGNACION-GANADO =====
+  /asignacion-ganado:
+    post:
+      tags: [AsignacionGanado]
+      operationId: crearPrimeraAsignacion
+      summary: Primera asignación de uno o varios animales sin potrero
+      description: >-
+        Sólo cubre la primera asignación (animal sin asignación activa). Si
+        el animal ya está asignado, responde 400 indicando usar
+        `POST /potrero/{potreroId}/traslado-ganado`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_ganado, id_potrero]
+              properties:
+                id_ganado:
+                  oneOf:
+                    - type: integer
+                    - type: array
+                      items: { type: integer }
+                  description: Un id o un arreglo de ids
+                id_potrero: { type: integer }
+      responses:
+        "201":
+          description: Asignación creada (una AsignacionGanado, o un arreglo si id_ganado fue un arreglo)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AsignacionGanado"
+                  - type: array
+                    items: { $ref: "#/components/schemas/AsignacionGanado" }
+        "400":
+          description: >-
+            Faltan campos, el potrero no pertenece al usuario, el animal no
+            existe / es de otra estancia, o el animal ya tiene una asignación
+            activa.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /asignacion-ganado/{asignacionId}:
+    get:
+      tags: [AsignacionGanado]
+      operationId: obtenerAsignacionPorId
+      summary: Asignación por id
+      parameters:
+        - $ref: "#/components/parameters/asignacionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AsignacionGanado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ===================================================== TRASLADO-GANADO ==
+  /traslado-ganado:
+    get:
+      tags: [TrasladoGanado]
+      operationId: listarTraslados
+      summary: Listado paginado de traslados de la estancia propia
+      parameters:
+        - name: estanciaId
+          in: query
+          description: Debe coincidir con la estancia del usuario autenticado (404 si no)
+          schema: { type: integer }
+        - $ref: "#/components/parameters/filtroDesde"
+        - $ref: "#/components/parameters/filtroHasta"
+        - name: id_potrero_origen
+          in: query
+          schema: { type: integer }
+        - name: id_potrero_destino
+          in: query
+          schema: { type: integer }
+        - $ref: "#/components/parameters/filtroIdGanado"
+        - name: page
+          in: query
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: OK, ordenado por fecha_movimiento DESC, id_traslado DESC
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/TrasladoGanado" }
+                  page: { type: integer }
+                  limit: { type: integer }
+                  total: { type: integer }
+                  totalPages: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: El usuario no tiene estancia, o estanciaId no coincide con la propia
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /traslado-ganado/{trasladoId}:
+    get:
+      tags: [TrasladoGanado]
+      operationId: obtenerTrasladoPorId
+      summary: Cabecera de un traslado con potreros, usuario responsable y detalle de animales
+      parameters:
+        - $ref: "#/components/parameters/trasladoId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrasladoGanadoDetalleResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Token JWT devuelto por POST /auth/login, firmado con id_usuario y
+        email en el payload.
+
+  parameters:
+    estanciaId:
+      name: estanciaId
+      in: path
+      required: true
+      schema: { type: integer }
+    potreroId:
+      name: potreroId
+      in: path
+      required: true
+      schema: { type: integer }
+    ganadoId:
+      name: ganadoId
+      in: path
+      required: true
+      schema: { type: integer }
+    asignacionId:
+      name: asignacionId
+      in: path
+      required: true
+      schema: { type: integer }
+    trasladoId:
+      name: trasladoId
+      in: path
+      required: true
+      schema: { type: integer }
+    filtroIdPotrero:
+      name: id_potrero
+      in: query
+      schema: { type: integer }
+    filtroIdGanado:
+      name: id_ganado
+      in: query
+      schema: { type: integer }
+    filtroVigente:
+      name: vigente
+      in: query
+      description: "true = sólo fecha_hasta NULL (activa); false = sólo cerradas"
+      schema: { type: boolean }
+    filtroDesde:
+      name: desde
+      in: query
+      description: Fecha desde (inclusive), formato YYYY-MM-DD
+      schema: { type: string, format: date }
+    filtroHasta:
+      name: hasta
+      in: query
+      description: Fecha hasta (inclusive), formato YYYY-MM-DD
+      schema: { type: string, format: date }
+    filtroDesdeFechaGeneracion:
+      name: desde
+      in: query
+      description: Fecha desde (inclusive) sobre fecha_generacion
+      schema: { type: string, format: date }
+    filtroHastaFechaGeneracion:
+      name: hasta
+      in: query
+      description: Fecha hasta (inclusive) sobre fecha_generacion
+      schema: { type: string, format: date }
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Falta el token de sesión, o es inválido/venció
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: >-
+        El recurso no existe, o pertenece a otro usuario (mismo código en
+        ambos casos, para no revelar la existencia de recursos ajenos).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Conflicto (recurso duplicado)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    PotrerosAfectadosError:
+      type: object
+      properties:
+        error: { type: string }
+        potrerosAfectados:
+          type: array
+          items:
+            type: object
+            properties:
+              id_potrero: { type: integer }
+              nombre: { type: string }
+      required: [error]
+
+    GeoJSONPolygon:
+      type: object
+      description: >-
+        GeoJSON Polygon (SRID 4326). Se valida anillo cerrado, coordenadas en
+        rango y ausencia de auto-intersección; se persiste con tipos
+        espaciales de MySQL (ST_GeomFromGeoJSON/ST_AsGeoJSON).
+      required: [type, coordinates]
+      properties:
+        type: { type: string, enum: [Polygon] }
+        coordinates:
+          type: array
+          items:
+            type: array
+            items:
+              type: array
+              items: { type: number, format: double }
+              minItems: 2
+              maxItems: 2
+      example:
+        type: Polygon
+        coordinates:
+          - - [-60.2, -34.7]
+            - [-60.0, -34.7]
+            - [-60.0, -34.5]
+            - [-60.2, -34.5]
+            - [-60.2, -34.7]
+
+    Usuario:
+      type: object
+      properties:
+        id_usuario: { type: integer }
+        nombre: { type: string }
+        email: { type: string, format: email }
+        telefono: { type: string, nullable: true }
+        ultimo_acceso: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Estancia:
+      type: object
+      properties:
+        id_estancia: { type: integer }
+        id_usuario: { type: integer }
+        nombre: { type: string }
+        departamento: { type: string, nullable: true }
+        provincia: { type: string, nullable: true }
+        superficie_total_ha: { type: string, nullable: true, description: "DECIMAL(10,2) serializado como string por el driver" }
+        geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Potrero:
+      type: object
+      properties:
+        id_potrero: { type: integer }
+        id_estancia: { type: integer }
+        nombre: { type: string }
+        descripcion: { type: string, nullable: true }
+        superficie_ha: { type: string, nullable: true, description: "DECIMAL(10,2) serializado como string" }
+        geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
+        activo: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    GanadoSexo:
+      type: string
+      enum: [M, F]
+    GanadoCategoria:
+      type: string
+      enum: [TERNERO, VAQUILLONA, NOVILLO, VACA, TORO]
+    GanadoEstadoFisiologico:
+      type: string
+      nullable: true
+      enum: [N, "L", P, B, "P/L", "B/L", "N/P", DESCONOCIDO]
+
+    GanadoInput:
+      type: object
+      required: [numero_identificacion, sexo, categoria, peso_kg]
+      properties:
+        numero_identificacion: { type: string, description: Único por estancia/sistema }
+        sexo: { $ref: "#/components/schemas/GanadoSexo" }
+        categoria: { $ref: "#/components/schemas/GanadoCategoria" }
+        peso_kg: { type: number, format: double }
+        condicion_corporal:
+          type: number
+          format: double
+          nullable: true
+          description: Obligatoria únicamente si categoria = VACA
+        fecha_nacimiento: { type: string, format: date, nullable: true }
+        estado_fisiologico: { $ref: "#/components/schemas/GanadoEstadoFisiologico" }
+        observaciones: { type: string, nullable: true }
+
+    Ganado:
+      type: object
+      properties:
+        id_ganado: { type: integer }
+        id_estancia: { type: integer }
+        numero_identificacion: { type: string }
+        fecha_nacimiento: { type: string, format: date, nullable: true }
+        sexo: { $ref: "#/components/schemas/GanadoSexo" }
+        categoria: { $ref: "#/components/schemas/GanadoCategoria" }
+        peso_kg: { type: string, nullable: true, description: "DECIMAL(6,2) serializado como string" }
+        condicion_corporal: { type: string, nullable: true, description: "DECIMAL(3,1) serializado como string" }
+        estado_fisiologico: { $ref: "#/components/schemas/GanadoEstadoFisiologico" }
+        observaciones: { type: string, nullable: true }
+        activo: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        id_potrero_actual:
+          type: integer
+          nullable: true
+          description: Resuelto por la asignación vigente (fecha_hasta NULL); null si no tiene
+        potrero_actual_nombre: { type: string, nullable: true }
+
+    AsignacionGanadoEstado:
+      type: string
+      enum: [ACTIVA, FINALIZADA]
+
+    AsignacionGanado:
+      type: object
+      properties:
+        id_asignacion: { type: integer }
+        id_ganado: { type: integer }
+        id_potrero: { type: integer }
+        fecha_desde: { type: string, format: date }
+        fecha_hasta: { type: string, format: date, nullable: true, description: "NULL = asignación vigente" }
+        estado: { $ref: "#/components/schemas/AsignacionGanadoEstado" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    PotreroRef:
+      type: object
+      properties:
+        id_potrero: { type: integer }
+        nombre: { type: string }
+
+    UsuarioRef:
+      type: object
+      properties:
+        id_usuario: { type: integer }
+        nombre: { type: string }
+        email: { type: string, format: email }
+
+    TrasladoGanadoDetalleAnimal:
+      type: object
+      properties:
+        id_ganado: { type: integer }
+        numero_identificacion: { type: string }
+        categoria: { $ref: "#/components/schemas/GanadoCategoria" }
+        id_asignacion_origen: { type: integer }
+        id_asignacion_destino: { type: integer }
+
+    TrasladoGanado:
+      type: object
+      properties:
+        id_traslado: { type: integer }
+        id_estancia: { type: integer }
+        id_potrero_origen: { type: integer }
+        id_potrero_destino: { type: integer }
+        fecha_movimiento: { type: string, format: date-time }
+        observaciones: { type: string, nullable: true }
+        id_usuario: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    TrasladoGanadoDetalleResponse:
+      type: object
+      description: Respuesta de POST .../traslado-ganado y de GET /traslado-ganado/{trasladoId}
+      properties:
+        id_traslado: { type: integer }
+        id_estancia: { type: integer }
+        fecha_movimiento: { type: string, format: date-time }
+        observaciones: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        usuario: { $ref: "#/components/schemas/UsuarioRef" }
+        potrero_origen: { $ref: "#/components/schemas/PotreroRef" }
+        potrero_destino: { $ref: "#/components/schemas/PotreroRef" }
+        detalles:
+          type: array
+          items: { $ref: "#/components/schemas/TrasladoGanadoDetalleAnimal" }
+
+    RecorridoItem:
+      type: object
+      properties:
+        id_traslado: { type: integer }
+        fecha_movimiento: { type: string, format: date-time }
+        observaciones: { type: string, nullable: true }
+        potrero_origen: { $ref: "#/components/schemas/PotreroRef" }
+        potrero_destino: { $ref: "#/components/schemas/PotreroRef" }
+
+    TrasladoGanadoAnaliticasPotreroConteo:
+      type: object
+      properties:
+        id_potrero: { type: integer }
+        nombre: { type: string }
+        cantidad_animales: { type: integer }
+
+    TrasladoGanadoAnaliticasRuta:
+      type: object
+      properties:
+        id_potrero_origen: { type: integer }
+        potrero_origen_nombre: { type: string }
+        id_potrero_destino: { type: integer }
+        potrero_destino_nombre: { type: string }
+        cantidad_animales: { type: integer }
+
+    TrasladoGanadoAnaliticasUltimo:
+      type: object
+      properties:
+        id_potrero: { type: integer }
+        nombre: { type: string }
+        id_traslado: { type: integer }
+        fecha_movimiento: { type: string, format: date-time }
+
+    TrasladoGanadoAnaliticas:
+      type: object
+      properties:
+        totalTraslados: { type: integer }
+        totalAnimalesMovidos: { type: integer }
+        entradasPorPotrero:
+          type: array
+          items: { $ref: "#/components/schemas/TrasladoGanadoAnaliticasPotreroConteo" }
+        salidasPorPotrero:
+          type: array
+          items: { $ref: "#/components/schemas/TrasladoGanadoAnaliticasPotreroConteo" }
+        matrizOrigenDestino:
+          type: array
+          items: { $ref: "#/components/schemas/TrasladoGanadoAnaliticasRuta" }
+        rutasMasFrecuentes:
+          type: array
+          items: { $ref: "#/components/schemas/TrasladoGanadoAnaliticasRuta" }
+          description: Top 5 de matrizOrigenDestino ordenado por cantidad_animales
+        ultimoTrasladoPorPotrero:
+          type: array
+          items: { $ref: "#/components/schemas/TrasladoGanadoAnaliticasUltimo" }
+
+    ObservacionSatelital:
+      type: object
+      properties:
+        id_observacion: { type: integer }
+        id_potrero: { type: integer }
+        fuente: { type: string, example: SENTINEL2 }
+        fecha: { type: string, format: date }
+        ndvi: { type: string, nullable: true, description: "DECIMAL(6,4) serializado como string" }
+        nubosidad: { type: string, nullable: true, description: "DECIMAL(5,2) serializado como string" }
+        created_at: { type: string, format: date-time }
+
+    DatoClimatico:
+      type: object
+      properties:
+        id_dato: { type: integer }
+        id_potrero: { type: integer }
+        fuente: { type: string, example: MODELO_PREDICTIVO }
+        fecha: { type: string, format: date }
+        temperatura: { type: string, nullable: true, description: "DECIMAL(5,2) serializado como string" }
+        precipitacion: { type: string, nullable: true, description: "DECIMAL(6,2) serializado como string" }
+        humedad: { type: string, nullable: true, description: "DECIMAL(5,2) serializado como string" }
+        created_at: { type: string, format: date-time }
+
+    DisponibilidadForrajera:
+      type: object
+      properties:
+        id_disponibilidad: { type: integer }
+        id_potrero: { type: integer }
+        fecha_calculo: { type: string, format: date-time }
+        kg_materia_seca_ha: { type: string, description: "DECIMAL(8,2) serializado como string" }
+        superficie_analizada_ha: { type: string, nullable: true }
+        indice_ndvi: { type: string, nullable: true, description: "DECIMAL(6,4) serializado como string" }
+        version_modelo: { type: string, example: dmp-model }
+        nivel_confianza: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    EstimacionForrajeraResponse:
+      allOf:
+        - $ref: "#/components/schemas/DisponibilidadForrajera"
+        - type: object
+          properties:
+            dmp_kg_ms_ha_periodo:
+              type: number
+              format: double
+              description: Predicción del modelo para la ventana del período (no se persiste todavía)
+            observacion: { $ref: "#/components/schemas/ObservacionSatelital" }
+            clima: { $ref: "#/components/schemas/DatoClimatico" }
+
+    EstimacionDemanda:
+      type: object
+      properties:
+        id_estimacion: { type: integer }
+        id_potrero: { type: integer }
+        fecha_calculo: { type: string, format: date-time }
+        cantidad_animales: { type: integer }
+        kg_materia_seca_dia: { type: string, description: "DECIMAL(8,2) serializado como string" }
+        version_modelo: { type: string, example: dmi-model }
+        nivel_confianza: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    DmiPrediccionAnimal:
+      type: object
+      properties:
+        animal_id: { type: string, description: Se envía como String(id_ganado) }
+        dmi_kg_dia: { type: number, format: double }
+        dmi_pct_peso_vivo: { type: number, format: double }
+
+    EstimacionNutricionalResponse:
+      allOf:
+        - $ref: "#/components/schemas/EstimacionDemanda"
+        - type: object
+          properties:
+            advertencias:
+              type: array
+              items: { type: string }
+              description: Del modelo predictivo (ej. peso fuera de rango observado para la categoría); no se persisten
+            predicciones:
+              type: array
+              items: { $ref: "#/components/schemas/DmiPrediccionAnimal" }
+              description: Detalle por animal devuelto por el modelo; no se persiste (EstimacionDemanda es agregada por potrero)
+
+    RecomendacionTipo:
+      type: string
+      enum: [REDUCIR_CARGA, AUMENTAR_CARGA, MANTENER]
+    RecomendacionPrioridad:
+      type: string
+      enum: ["1", "2", "3"]
+      description: "1 = más urgente, 3 = menos urgente"
+    RecomendacionEstado:
+      type: string
+      enum: [PENDIENTE, REALIZADA, RECHAZADA]
+
+    Recomendacion:
+      type: object
+      properties:
+        id_recomendacion: { type: integer }
+        id_potrero: { type: integer }
+        id_estimacion_demanda: { type: integer }
+        id_disponibilidad: { type: integer }
+        fecha_generacion: { type: string, format: date-time }
+        tipo: { $ref: "#/components/schemas/RecomendacionTipo" }
+        descripcion: { type: string, nullable: true }
+        prioridad: { $ref: "#/components/schemas/RecomendacionPrioridad" }
+        fundamento: { type: string, nullable: true, description: Texto explicando oferta/demanda/días de pastoreo restantes }
+        estado: { $ref: "#/components/schemas/RecomendacionEstado" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
