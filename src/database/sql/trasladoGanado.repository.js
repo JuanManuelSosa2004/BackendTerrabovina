@@ -2,20 +2,11 @@
 
 const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../sequelize');
+const { toMysqlDatetimeUtc } = require('../../utils/mysqlDate');
 
 const HEADER_FIELDS =
   't.id_traslado, t.id_estancia, t.id_potrero_origen, t.id_potrero_destino, ' +
   't.fecha_movimiento, t.observaciones, t.id_usuario, t.created_at, t.updated_at';
-
-// mysql2 escapea un objeto Date usado como replacement con la zona horaria
-// LOCAL del proceso, no con la `timezone: '+00:00'` configurada en
-// sequelize.js (esa opción sólo fija la variable de sesión `time_zone`,
-// irrelevante para una columna DATETIME naive). Se formatea a mano acá,
-// mismo motivo por el que fecha_desde/fecha_hasta de asignacion_ganado
-// siempre viajan como string 'YYYY-MM-DD' y nunca como Date.
-function toMysqlDatetimeUtc(date) {
-  return date.toISOString().slice(0, 19).replace('T', ' ');
-}
 
 async function crearTraslado(
   { id_estancia, id_potrero_origen, id_potrero_destino, fecha_movimiento, observaciones, id_usuario },

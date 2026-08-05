@@ -2,31 +2,19 @@
 
 const observacionSatelitalRepository = require('../database/sql/observacionSatelital.repository');
 const datoClimaticoRepository = require('../database/sql/datoClimatico.repository');
-const {
-  generarObservacionSatelitalPlaceholder,
-  generarDatoClimaticoPlaceholder,
-} = require('../services/fuentesExternas.placeholder');
 
-function hoy() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// #26: RNF003 — si hay una observación (aunque tenga varios días), se
-// devuelve tal cual con su fecha en lugar de fallar; sólo se genera una
-// nueva si el potrero no tiene ninguna todavía (bootstrap). No repite el
-// cálculo en cada GET para no romper idempotencia
-// (docs/backend-gap-analysis.md §5.8).
+// #26: RNF003 — devuelve la última observación satelital persistida, sin
+// importar su antigüedad, en lugar de interrumpir el servicio. La ingesta
+// (llamar al modelo predictivo) sólo ocurre en POST
+// /potrero/{id}/estimacion-forrajera; un GET nunca dispara una llamada a
+// un servicio externo. Si el potrero nunca tuvo una estimación, 404.
 async function getNdviVigente(req, res) {
-  const id_potrero = req.potrero.id_potrero;
-  let observacion = await observacionSatelitalRepository.getUltimaByPotrero(id_potrero);
-
+  const observacion = await observacionSatelitalRepository.getUltimaByPotrero(req.potrero.id_potrero);
   if (!observacion) {
-    observacion = await observacionSatelitalRepository.crearObservacion({
-      id_potrero,
-      ...generarObservacionSatelitalPlaceholder(hoy()),
+    return res.status(404).json({
+      error: 'No hay observación satelital todavía. Ejecute POST .../estimacion-forrajera para generar una.',
     });
   }
-
   return res.json(observacion);
 }
 
@@ -42,15 +30,14 @@ async function getNdviHistorico(req, res) {
   return res.json({ observaciones });
 }
 
-// #28
+// #28: misma lógica que #26 — sólo lectura de lo último persistido.
 async function getDatoClimaVigente(req, res) {
-  const id_potrero = req.potrero.id_potrero;
-  let dato = await datoClimaticoRepository.getUltimoByPotrero(id_potrero);
-
+  const dato = await datoClimaticoRepository.getUltimoByPotrero(req.potrero.id_potrero);
   if (!dato) {
-    dato = await datoClimaticoRepository.crearDato({ id_potrero, ...generarDatoClimaticoPlaceholder(hoy()) });
+    return res.status(404).json({
+      error: 'No hay dato climático todavía. Ejecute POST .../estimacion-forrajera para generar uno.',
+    });
   }
-
   return res.json(dato);
 }
 

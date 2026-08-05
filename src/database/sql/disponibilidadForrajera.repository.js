@@ -35,7 +35,10 @@ async function getHistoricoByPotrero(id_potrero, { desde, hasta } = {}) {
   );
 }
 
-async function crear({ id_potrero, fecha_calculo, kg_materia_seca_ha, superficie_analizada_ha, indice_ndvi, version_modelo, nivel_confianza }) {
+async function crear(
+  { id_potrero, fecha_calculo, kg_materia_seca_ha, superficie_analizada_ha, indice_ndvi, version_modelo, nivel_confianza },
+  transaction
+) {
   const [insertId] = await sequelize.query(
     `INSERT INTO \`disponibilidad_forrajera\`
        (id_potrero, fecha_calculo, kg_materia_seca_ha, superficie_analizada_ha, indice_ndvi,
@@ -54,11 +57,13 @@ async function crear({ id_potrero, fecha_calculo, kg_materia_seca_ha, superficie
         nivel_confianza: nivel_confianza ?? null,
       },
       type: QueryTypes.INSERT,
+      transaction,
     }
   );
   const rows = await sequelize.query(`SELECT ${SELECT_FIELDS} FROM \`disponibilidad_forrajera\` WHERE id_disponibilidad = :id`, {
     replacements: { id: insertId },
     type: QueryTypes.SELECT,
+    transaction,
   });
   return rows[0];
 }

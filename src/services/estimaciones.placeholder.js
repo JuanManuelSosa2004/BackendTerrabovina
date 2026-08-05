@@ -1,62 +1,14 @@
 'use strict';
 
 /**
- * Los modelos entrenados (regresión Ridge para demanda nutricional, §3.8
- * del PFI; el de disponibilidad forrajera ni siquiera está entrenado
- * todavía, §3.11) son artefactos Python/scikit-learn que viven fuera de
- * este backend, en el módulo desacoplado "Modelos Predictivos" (RNF013).
- * Esta implementación es una heurística simple y documentada — no el
- * modelo real — que mantiene el pipeline funcional de punta a punta hasta
- * integrar el artefacto entrenado. Se identifica con una versión de
- * modelo que empieza con "placeholder-" para que nunca se confunda con un
- * resultado del modelo real (docs/backend-gap-analysis.md §8).
+ * A diferencia de disponibilidad forrajera y demanda nutricional (ahora
+ * resueltas por el modelo predictivo real, ver
+ * src/services/modeloPredictivo.client.js), la recomendación nunca fue un
+ * modelo entrenado: es una regla de umbrales propia sobre "días de
+ * pastoreo restantes" (RF009/RF010). Se mantiene acá, ya no junto a
+ * heurísticas placeholder — el nombre del archivo queda por compatibilidad
+ * con las rutas existentes.
  */
-
-const VERSION_DISPONIBILIDAD = 'placeholder-forraje-v0';
-const VERSION_DEMANDA = 'placeholder-dmi-v0';
-
-// Consumo diario como % del peso vivo por categoría, aproximado a partir
-// de los valores medios reportados en el PFI (§3.7.6 de TerraBovina_50_V2):
-// Ternero/Ternera ~3,16 %, Toro ~1,99 %, el resto en un rango intermedio.
-const PORCENTAJE_PESO_VIVO_POR_CATEGORIA = {
-  TERNERO: 0.032,
-  'TERNERO/TERNERA': 0.032,
-  VAQUILLONA: 0.028,
-  NOVILLO: 0.028,
-  VACA: 0.025,
-  TORO: 0.02,
-};
-const PORCENTAJE_PESO_VIVO_DEFAULT = 0.025;
-
-// RF004: traduce NDVI (auxiliado por datos climáticos) en materia seca
-// disponible por hectárea. Factor lineal simple; la precipitación reciente
-// se usa como corrector menor, no como variable dominante.
-function calcularDisponibilidadForrajera({ ndvi, precipitacion }) {
-  const ndviEfectivo = Math.max(0, Number(ndvi) || 0);
-  const factorPrecipitacion = 1 + Math.min(Number(precipitacion) || 0, 10) / 100;
-  const kg_materia_seca_ha = Number((ndviEfectivo * 3000 * factorPrecipitacion).toFixed(2));
-
-  return {
-    kg_materia_seca_ha,
-    version_modelo: VERSION_DISPONIBILIDAD,
-    nivel_confianza: 0.3,
-  };
-}
-
-// RF008: consumo diario de materia seca agregado del ganado de un potrero.
-function calcularDemandaGanado(listaGanado) {
-  const kg_materia_seca_dia = listaGanado.reduce((total, animal) => {
-    const pct = PORCENTAJE_PESO_VIVO_POR_CATEGORIA[animal.categoria] ?? PORCENTAJE_PESO_VIVO_DEFAULT;
-    return total + Number(animal.peso_kg || 0) * pct;
-  }, 0);
-
-  return {
-    cantidad_animales: listaGanado.length,
-    kg_materia_seca_dia: Number(kg_materia_seca_dia.toFixed(2)),
-    version_modelo: VERSION_DEMANDA,
-    nivel_confianza: 0.3,
-  };
-}
 
 // RF009/RF010: cruza oferta y demanda de un potrero y decide tipo y
 // prioridad con umbrales simples sobre los "días de pastoreo restantes"
@@ -95,4 +47,4 @@ function generarRecomendacion({ disponibilidad, estimacion, superficie_ha }) {
   };
 }
 
-module.exports = { calcularDisponibilidadForrajera, calcularDemandaGanado, generarRecomendacion };
+module.exports = { generarRecomendacion };

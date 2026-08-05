@@ -14,7 +14,7 @@ async function getUltimoByPotrero(id_potrero) {
   return rows[0] ?? null;
 }
 
-async function crearDato({ id_potrero, fuente, fecha, temperatura, precipitacion, humedad }) {
+async function crearDato({ id_potrero, fuente, fecha, temperatura, precipitacion, humedad }, transaction) {
   const [insertId] = await sequelize.query(
     `INSERT INTO \`dato_climatico\` (id_potrero, fuente, fecha, temperatura, precipitacion, humedad, created_at)
      VALUES (:id_potrero, :fuente, :fecha, :temperatura, :precipitacion, :humedad, NOW())`,
@@ -28,11 +28,13 @@ async function crearDato({ id_potrero, fuente, fecha, temperatura, precipitacion
         humedad: humedad ?? null,
       },
       type: QueryTypes.INSERT,
+      transaction,
     }
   );
   const rows = await sequelize.query(`SELECT ${SELECT_FIELDS} FROM \`dato_climatico\` WHERE id_dato = :id`, {
     replacements: { id: insertId },
     type: QueryTypes.SELECT,
+    transaction,
   });
   return rows[0];
 }

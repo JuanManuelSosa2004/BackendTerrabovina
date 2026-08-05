@@ -34,18 +34,20 @@ async function getHistorialByPotrero(id_potrero, { desde, hasta } = {}) {
   );
 }
 
-async function crearObservacion({ id_potrero, fuente, fecha, ndvi, nubosidad }) {
+async function crearObservacion({ id_potrero, fuente, fecha, ndvi, nubosidad }, transaction) {
   const [insertId] = await sequelize.query(
     `INSERT INTO \`observacion_satelital\` (id_potrero, fuente, fecha, ndvi, nubosidad, created_at)
      VALUES (:id_potrero, :fuente, :fecha, :ndvi, :nubosidad, NOW())`,
     {
       replacements: { id_potrero, fuente, fecha, ndvi, nubosidad: nubosidad ?? null },
       type: QueryTypes.INSERT,
+      transaction,
     }
   );
   const rows = await sequelize.query(`SELECT ${SELECT_FIELDS} FROM \`observacion_satelital\` WHERE id_observacion = :id`, {
     replacements: { id: insertId },
     type: QueryTypes.SELECT,
+    transaction,
   });
   return rows[0];
 }
