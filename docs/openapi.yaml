@@ -937,6 +937,83 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
 
   # =========================================================== GANADO =====
+  /ganado:
+    patch:
+      tags: [Ganado]
+      operationId: actualizarGanadoMultiple
+      summary: Actualizar uno o varios animales (parcial, en lote)
+      description: >-
+        Variante en lote de `PATCH /ganado/{ganadoId}` (mismos campos
+        actualizables). Reemplaza el loop de un PATCH por animal para
+        acciones masivas, por ejemplo cambio de categoría de una selección.
+        Todo o nada: si algún id no existe, no pertenece al usuario o está
+        dado de baja, se hace rollback completo y se responde 404 (ningún
+        animal se actualiza).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ganado]
+              properties:
+                ganado:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [id_ganado]
+                    properties:
+                      id_ganado: { type: integer }
+                      numero_identificacion: { type: string }
+                      fecha_nacimiento: { type: string, format: date, nullable: true }
+                      sexo: { $ref: "#/components/schemas/GanadoSexo" }
+                      categoria: { $ref: "#/components/schemas/GanadoCategoria" }
+                      peso_kg: { type: number, format: double }
+                      condicion_corporal: { type: number, format: double, nullable: true }
+                      estado_fisiologico: { $ref: "#/components/schemas/GanadoEstadoFisiologico" }
+                      observaciones: { type: string, nullable: true }
+              example:
+                ganado:
+                  - { id_ganado: 12, categoria: NOVILLO }
+                  - { id_ganado: 13, categoria: NOVILLO, peso_kg: 350 }
+      responses:
+        "200":
+          description: Actualización aplicada a todos los animales indicados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: boolean, example: true }
+                  actualizados:
+                    type: array
+                    items: { $ref: "#/components/schemas/Ganado" }
+                  noEncontrados: { type: array, items: { type: integer } }
+        "400":
+          description: Falta ganado, el arreglo está vacío, falta id_ganado en algún item o algún item no trae campos para actualizar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: >-
+            Algún animal no existe, no pertenece al usuario o está dado de
+            baja; no se aplicó ningún cambio (rollback completo)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Error"
+                  - type: object
+                    properties:
+                      noEncontrados: { type: array, items: { type: integer } }
+        "409":
+          description: numero_identificacion duplicado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /ganado/baja:
     post:
       tags: [Ganado]
