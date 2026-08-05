@@ -80,6 +80,20 @@ async function getGanadoById(id, transaction) {
   return rows[0] ?? null;
 }
 
+// Variante de requireGanadoOwnership para uso dentro de una transacción
+// (baja múltiple): confirma que el animal existe, está activo y pertenece
+// al usuario, sin depender del middleware de ruta (que sólo resuelve un
+// :ganadoId por request).
+async function getGanadoDeUsuario(id, id_usuario, transaction) {
+  const rows = await sequelize.query(
+    `SELECT g.id_ganado, g.id_estancia
+     FROM \`ganado\` g JOIN \`estancia\` e ON e.id_estancia = g.id_estancia
+     WHERE g.id_ganado = :id AND e.id_usuario = :id_usuario AND g.activo = TRUE`,
+    { replacements: { id, id_usuario }, type: QueryTypes.SELECT, transaction }
+  );
+  return rows[0] ?? null;
+}
+
 // #19: todo el ganado activo de la estancia (la baja lógica lo excluye).
 async function getGanadoByEstancia(id_estancia) {
   return sequelize.query(
@@ -103,7 +117,7 @@ async function getGanadoByPotrero(id_potrero) {
   );
 }
 
-async function updateGanado(id, fields) {
+async function updateGanado(id, fields, transaction) {
   const keys = UPDATABLE_FIELDS.filter((key) => fields[key] !== undefined);
   if (keys.length > 0) {
     const setClause = keys.map((key) => `\`${key}\` = :${key}`).join(', ');
@@ -111,9 +125,10 @@ async function updateGanado(id, fields) {
     await sequelize.query(`UPDATE \`ganado\` SET ${setClause}, updated_at = NOW() WHERE id_ganado = :id`, {
       replacements,
       type: QueryTypes.UPDATE,
+      transaction,
     });
   }
-  return getGanadoById(id);
+  return getGanadoById(id, transaction);
 }
 
 // #21: baja lógica (docs/backend-gap-analysis.md §5.3). No borra el
@@ -130,6 +145,7 @@ async function darDeBaja(id, transaction) {
 module.exports = {
   createGanado,
   getGanadoById,
+  getGanadoDeUsuario,
   getGanadoByEstancia,
   getGanadoByPotrero,
   updateGanado,

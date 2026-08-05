@@ -9,6 +9,15 @@ const { requireGanadoOwnership } = require('../middlewares/ownership.middleware'
 
 const router = express.Router();
 router.use(requireAuth);
+
+// #21 bis: baja múltiple. Debe registrarse antes de `/:ganadoId` para que
+// Express no confunda "baja" con un id.
+router.post('/baja', controller.removeMultiple);
+
+// Batch de update() (acciones masivas, p. ej. cambio de categoría). '/' no
+// colisiona con '/:ganadoId' (requiere un segmento no vacío).
+router.patch('/', controller.updateMultiple);
+
 router.use('/:ganadoId', requireGanadoOwnership());
 
 // #20, #21

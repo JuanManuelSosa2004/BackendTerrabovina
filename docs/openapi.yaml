@@ -937,6 +937,68 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
 
   # =========================================================== GANADO =====
+  /ganado/baja:
+    post:
+      tags: [Ganado]
+      operationId: darDeBajaGanadoMultiple
+      summary: Dar de baja uno o varios animales (baja lógica)
+      description: >-
+        Variante en lote de `DELETE /ganado/{ganadoId}`. Todo o nada: si
+        algún id no existe, no pertenece al usuario o ya está inactivo, se
+        hace rollback completo y se responde 404 (ningún animal se da de
+        baja). Para cada animal dado de baja, cierra su asignación activa
+        (si tenía una) en la misma transacción.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_ganado]
+              properties:
+                id_ganado:
+                  oneOf:
+                    - type: integer
+                    - type: array
+                      items: { type: integer }
+                      minItems: 1
+                  description: Un id o un arreglo de ids
+              example:
+                id_ganado: [12, 13, 14]
+      responses:
+        "200":
+          description: Baja lógica aplicada a todos los animales indicados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean, example: true }
+                  eliminados: { type: array, items: { type: integer } }
+                  noEncontrados: { type: array, items: { type: integer } }
+              example:
+                deleted: true
+                eliminados: [12, 13, 14]
+                noEncontrados: []
+        "400":
+          description: Falta id_ganado o el arreglo está vacío
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: >-
+            Algún animal no existe, no pertenece al usuario o ya está dado
+            de baja; no se aplicó ninguna baja (rollback completo)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Error"
+                  - type: object
+                    properties:
+                      noEncontrados: { type: array, items: { type: integer } }
+
   /ganado/{ganadoId}:
     parameters:
       - $ref: "#/components/parameters/ganadoId"

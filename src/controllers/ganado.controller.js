@@ -159,10 +159,123 @@ async function remove(req, res) {
   return res.json({ deleted: true });
 }
 
+// Batch de update() (no está en los 35 endpoints de la V2, igual que
+// update()): reemplaza el loop de PATCH /ganado/:id por animal que hacía
+// el frontend para acciones masivas (p. ej. cambio de categoría). Mismo
+// criterio todo-o-nada que removeMultiple: si algún id no existe, no
+// pertenece al usuario o está dado de baja, rollback completo y 404.
+async function updateMultiple(req, res) {
+  const items = Array.isArray(req.body?.ganado) ? req.body.ganado : [];
+
+  if (items.length === 0 || items.some((item) => !item?.id_ganado)) {
+    return res.status(400).json({ error: 'Se requiere un arreglo ganado con al menos un id_ganado.' });
+  }
+
+  const fieldsById = new Map();
+  for (const item of items) {
+    const fields = {};
+    for (const key of UPDATABLE_FIELDS) {
+      if (item[key] !== undefined) fields[key] = item[key];
+    }
+    if (Object.keys(fields).length === 0) {
+      return res.status(400).json({ error: `No hay campos para actualizar en el animal ${item.id_ganado}.` });
+    }
+    fieldsById.set(item.id_ganado, fields);
+  }
+
+  const noEncontrados = [];
+
+  try {
+    const actualizados = await sequelize.transaction(async (t) => {
+      for (const id_ganado of fieldsById.keys()) {
+        const ganado = await ganadoRepository.getGanadoDeUsuario(id_ganado, req.usuario.id_usuario, t);
+        if (!ganado) noEncontrados.push(id_ganado);
+      }
+      if (noEncontrados.length > 0) {
+        const err = new Error('Algún animal no existe, no pertenece al usuario o está dado de baja.');
+        err.status = 404;
+        throw err;
+      }
+
+      const resultados = [];
+      for (const [id_ganado, fields] of fieldsById) {
+        resultados.push(await ganadoRepository.updateGanado(id_ganado, fields, t));
+      }
+      return resultados;
+    });
+
+    return res.json({ updated: true, actualizados, noEncontrados: [] });
+  } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ error: error.message, noEncontrados });
+    }
+    if (isDuplicateEntryError(error)) {
+      return res.status(409).json({ error: 'Ya existe un animal con ese numero_identificacion.' });
+    }
+    throw error;
+  }
+}
+
+// #21 bis: baja lógica de uno o varios animales en una sola transacción.
+// Todo o nada: si algún id no existe, no pertenece al usuario o ya está
+// inactivo, se hace rollback completo y se responde 404 (mismo criterio
+// que POST /potrero/:id/traslado-ganado para lotes inválidos). Cada baja
+// replica remove(): cierra la asignación activa del animal, si tenía una,
+// antes de marcarlo inactivo.
+async function removeMultiple(req, res) {
+  const idsGanado = Array.isArray(req.body?.id_ganado) ? req.body.id_ganado : [req.body?.id_ganado];
+
+  if (idsGanado.length === 0 || idsGanado.some((id) => !id)) {
+    return res.status(400).json({ error: 'Se requiere al menos un id_ganado.' });
+  }
+
+  const noEncontrados = [];
+
+  try {
+    await sequelize.transaction(async (t) => {
+      for (const id_ganado of idsGanado) {
+        const ganado = await ganadoRepository.getGanadoDeUsuario(id_ganado, req.usuario.id_usuario, t);
+        if (!ganado) noEncontrados.push(id_ganado);
+      }
+      if (noEncontrados.length > 0) {
+        const err = new Error('Algún animal no existe, no pertenece al usuario o ya está dado de baja.');
+        err.status = 404;
+        throw err;
+      }
+
+      const hoy = new Date().toISOString().slice(0, 10);
+      for (const id_ganado of idsGanado) {
+        const asignacionActiva = await asignacionGanadoRepository.getAsignacionActivaByGanado(id_ganado, t);
+        if (asignacionActiva) {
+          await asignacionGanadoRepository.cerrarAsignacion(asignacionActiva.id_asignacion, hoy, 'FINALIZADA', t);
+        }
+        await ganadoRepository.darDeBaja(id_ganado, t);
+      }
+    });
+  } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ error: error.message, noEncontrados });
+    }
+    throw error;
+  }
+
+  return res.json({ deleted: true, eliminados: idsGanado, noEncontrados: [] });
+}
+
 // #22
 async function listByPotrero(req, res) {
   const ganado = await ganadoRepository.getGanadoByPotrero(req.potrero.id_potrero);
   return res.json(ganado);
 }
 
-module.exports = { createEnEstancia, createEnPotrero, listByEstancia, getById, update, remove, listByPotrero };
+module.exports = {
+  createEnEstancia,
+  createEnPotrero,
+  listByEstancia,
+  getById,
+  update,
+  updateMultiple,
+  remove,
+  removeMultiple,
+  listByPotrero,
+};
