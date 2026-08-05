@@ -32,15 +32,77 @@ async function getAsignacionesActivasByPotrero(id_potrero, transaction) {
   );
 }
 
-async function getHistorialByEstancia(id_estancia) {
+// Filtros comunes a los tres históricos (por estancia, por potrero, por
+// animal): vigente=true/false acota a fecha_hasta NULL/no NULL,
+// desde/hasta acotan fecha_desde. `vigente` ya viaja como boolean o
+// undefined (el controller parsea el query string).
+function buildFiltrosHistorial({ id_potrero, id_ganado, vigente, desde, hasta }, replacements) {
+  const conditions = [];
+  if (id_potrero) {
+    conditions.push('a.id_potrero = :id_potrero');
+    replacements.id_potrero = id_potrero;
+  }
+  if (id_ganado) {
+    conditions.push('a.id_ganado = :id_ganado');
+    replacements.id_ganado = id_ganado;
+  }
+  if (vigente === true) {
+    conditions.push('a.fecha_hasta IS NULL');
+  } else if (vigente === false) {
+    conditions.push('a.fecha_hasta IS NOT NULL');
+  }
+  if (desde) {
+    conditions.push('a.fecha_desde >= :desde');
+    replacements.desde = desde;
+  }
+  if (hasta) {
+    conditions.push('a.fecha_desde <= :hasta');
+    replacements.hasta = hasta;
+  }
+  return conditions;
+}
+
+async function getHistorialByEstancia(id_estancia, filtros = {}) {
+  const replacements = { id_estancia };
+  const conditions = ['g.id_estancia = :id_estancia', ...buildFiltrosHistorial(filtros, replacements)];
+
   return sequelize.query(
     `SELECT a.id_asignacion, a.id_ganado, a.id_potrero, a.fecha_desde, a.fecha_hasta,
             a.estado, a.created_at, a.updated_at
      FROM \`asignacion_ganado\` a
      JOIN \`ganado\` g ON g.id_ganado = a.id_ganado
-     WHERE g.id_estancia = :id_estancia
+     WHERE ${conditions.join(' AND ')}
      ORDER BY a.fecha_desde DESC, a.id_asignacion DESC`,
-    { replacements: { id_estancia }, type: QueryTypes.SELECT }
+    { replacements, type: QueryTypes.SELECT }
+  );
+}
+
+// Histórico de un potrero puntual: quién pasó por ahí, no sólo quién está
+// hoy (eso ya lo resuelve ganado.repository#getGanadoByPotrero).
+async function getHistorialByPotrero(id_potrero, filtros = {}) {
+  const replacements = { id_potrero };
+  const conditions = ['a.id_potrero = :id_potrero', ...buildFiltrosHistorial(filtros, replacements)];
+
+  return sequelize.query(
+    `SELECT ${SELECT_FIELDS} FROM \`asignacion_ganado\` a
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY a.fecha_desde DESC, a.id_asignacion DESC`,
+    { replacements, type: QueryTypes.SELECT }
+  );
+}
+
+// Histórico completo de un animal a través de todos los potreros por los
+// que pasó (complementa a GET /ganado/:id/recorrido, que es la vista
+// "traslado a traslado"; esta es la vista "asignación a asignación").
+async function getHistorialByGanado(id_ganado, filtros = {}) {
+  const replacements = { id_ganado };
+  const conditions = ['a.id_ganado = :id_ganado', ...buildFiltrosHistorial(filtros, replacements)];
+
+  return sequelize.query(
+    `SELECT ${SELECT_FIELDS} FROM \`asignacion_ganado\` a
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY a.fecha_desde DESC, a.id_asignacion DESC`,
+    { replacements, type: QueryTypes.SELECT }
   );
 }
 
@@ -80,6 +142,8 @@ module.exports = {
   getAsignacionActivaByGanado,
   getAsignacionesActivasByPotrero,
   getHistorialByEstancia,
+  getHistorialByPotrero,
+  getHistorialByGanado,
   crearAsignacion,
   cerrarAsignacion,
   cerrarAsignacionesActivasDePotrero,

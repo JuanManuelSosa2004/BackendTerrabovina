@@ -147,6 +147,13 @@ beforeAll(async () => {
 afterAll(async () => {
   const estanciaIds = [estanciaId, otraEstanciaId];
   await sequelize.query(
+    'DELETE FROM traslado_ganado_detalle WHERE id_traslado IN (SELECT id_traslado FROM traslado_ganado WHERE id_estancia IN (:estanciaIds))',
+    { replacements: { estanciaIds } }
+  );
+  await sequelize.query('DELETE FROM traslado_ganado WHERE id_estancia IN (:estanciaIds)', {
+    replacements: { estanciaIds },
+  });
+  await sequelize.query(
     'DELETE FROM asignacion_ganado WHERE id_ganado IN (SELECT id_ganado FROM ganado WHERE id_estancia IN (:estanciaIds))',
     { replacements: { estanciaIds } }
   );
@@ -282,7 +289,7 @@ describe('Asignación de ganado', () => {
     ganadoOtraEstanciaId = ganadoOtraEstancia.body.id_ganado;
   });
 
-  test('POST /api/v2/asignacion-ganado mueve un animal sin potrero', async () => {
+  test('POST /api/v2/asignacion-ganado asigna por primera vez a un animal sin potrero', async () => {
     const res = await authA(request(app).post('/api/v2/asignacion-ganado')).send({
       id_ganado: ganadoAId,
       id_potrero: potreroId,
@@ -291,6 +298,18 @@ describe('Asignación de ganado', () => {
     expect(res.body.id_ganado).toBe(ganadoAId);
     expect(res.body.id_potrero).toBe(potreroId);
     expect(res.body.fecha_hasta).toBeNull();
+  });
+
+  test('rechaza asignar un animal que ya tiene una asignación activa', async () => {
+    const res = await authA(request(app).post('/api/v2/asignacion-ganado')).send({
+      id_ganado: ganadoAId,
+      id_potrero: otroPotreroId,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/traslado-ganado/);
+
+    const getGanado = await authA(request(app).get(`/api/v2/ganado/${ganadoAId}`));
+    expect(getGanado.body.id_potrero_actual).toBe(potreroId);
   });
 
   test('rechaza mover un animal de otra estancia', async () => {
@@ -303,19 +322,20 @@ describe('Asignación de ganado', () => {
 
   test('rechaza un potrero que no pertenece al usuario', async () => {
     const res = await authA(request(app).post('/api/v2/asignacion-ganado')).send({
-      id_ganado: ganadoAId,
+      id_ganado: ganadoBId,
       id_potrero: potreroOtraEstanciaId,
     });
     expect(res.status).toBe(400);
   });
 
-  test('mover a un segundo potrero cierra la asignación anterior', async () => {
-    const res = await authA(request(app).post('/api/v2/asignacion-ganado')).send({
-      id_ganado: ganadoAId,
-      id_potrero: otroPotreroId,
+  test('trasladar a un segundo potrero cierra la asignación anterior', async () => {
+    const res = await authA(request(app).post(`/api/v2/potrero/${potreroId}/traslado-ganado`)).send({
+      id_potrero_destino: otroPotreroId,
+      id_ganado: [ganadoAId],
+      fecha_movimiento: new Date().toISOString(),
     });
     expect(res.status).toBe(201);
-    expect(res.body.id_potrero).toBe(otroPotreroId);
+    expect(res.body.potrero_destino.id_potrero).toBe(otroPotreroId);
 
     const enPotreroOriginal = await authA(request(app).get(`/api/v2/potrero/${potreroId}/ganado`));
     expect(enPotreroOriginal.body.find((g) => g.id_ganado === ganadoAId)).toBeUndefined();

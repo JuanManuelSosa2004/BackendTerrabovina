@@ -5,6 +5,8 @@ const Estancia = require('./estancia.model');
 const Potrero = require('./potrero.model');
 const Ganado = require('./ganado.model');
 const AsignacionGanado = require('./asignacionGanado.model');
+const TrasladoGanado = require('./trasladoGanado.model');
+const TrasladoGanadoDetalle = require('./trasladoGanadoDetalle.model');
 const ObservacionSatelital = require('./observacionSatelital.model');
 const DatoClimatico = require('./datoClimatico.model');
 const DisponibilidadForrajera = require('./disponibilidadForrajera.model');
@@ -31,6 +33,30 @@ AsignacionGanado.belongsTo(Ganado, { foreignKey: 'id_ganado', as: 'ganado' });
 
 Potrero.hasMany(AsignacionGanado, { foreignKey: 'id_potrero', as: 'asignaciones' });
 AsignacionGanado.belongsTo(Potrero, { foreignKey: 'id_potrero', as: 'potrero' });
+
+// Cabecera del traslado: cuelga de la estancia y referencia dos potreros
+// de esa misma estancia (origen y destino). Cada uno necesita su propio
+// alias porque Sequelize no puede inferirlos a partir de una sola FK
+// genérica "id_potrero".
+Estancia.hasMany(TrasladoGanado, { foreignKey: 'id_estancia', as: 'trasladosGanado' });
+TrasladoGanado.belongsTo(Estancia, { foreignKey: 'id_estancia', as: 'estancia' });
+Potrero.hasMany(TrasladoGanado, { foreignKey: 'id_potrero_origen', as: 'trasladosComoOrigen' });
+TrasladoGanado.belongsTo(Potrero, { foreignKey: 'id_potrero_origen', as: 'potreroOrigen' });
+Potrero.hasMany(TrasladoGanado, { foreignKey: 'id_potrero_destino', as: 'trasladosComoDestino' });
+TrasladoGanado.belongsTo(Potrero, { foreignKey: 'id_potrero_destino', as: 'potreroDestino' });
+Usuario.hasMany(TrasladoGanado, { foreignKey: 'id_usuario', as: 'trasladosGanado' });
+TrasladoGanado.belongsTo(Usuario, { foreignKey: 'id_usuario', as: 'usuario' });
+
+// Detalle: un renglón por animal trasladado, con las dos asignaciones
+// (origen/destino) que ese traslado abrió y cerró en asignacion_ganado.
+TrasladoGanado.hasMany(TrasladoGanadoDetalle, { foreignKey: 'id_traslado', as: 'detalles' });
+TrasladoGanadoDetalle.belongsTo(TrasladoGanado, { foreignKey: 'id_traslado', as: 'traslado' });
+Ganado.hasMany(TrasladoGanadoDetalle, { foreignKey: 'id_ganado', as: 'trasladosDetalle' });
+TrasladoGanadoDetalle.belongsTo(Ganado, { foreignKey: 'id_ganado', as: 'ganado' });
+AsignacionGanado.hasOne(TrasladoGanadoDetalle, { foreignKey: 'id_asignacion_origen', as: 'detalleComoOrigen' });
+TrasladoGanadoDetalle.belongsTo(AsignacionGanado, { foreignKey: 'id_asignacion_origen', as: 'asignacionOrigen' });
+AsignacionGanado.hasOne(TrasladoGanadoDetalle, { foreignKey: 'id_asignacion_destino', as: 'detalleComoDestino' });
+TrasladoGanadoDetalle.belongsTo(AsignacionGanado, { foreignKey: 'id_asignacion_destino', as: 'asignacionDestino' });
 
 Potrero.hasMany(ObservacionSatelital, { foreignKey: 'id_potrero', as: 'observacionesSatelitales' });
 ObservacionSatelital.belongsTo(Potrero, { foreignKey: 'id_potrero', as: 'potrero' });
@@ -61,6 +87,8 @@ module.exports = {
   Potrero,
   Ganado,
   AsignacionGanado,
+  TrasladoGanado,
+  TrasladoGanadoDetalle,
   ObservacionSatelital,
   DatoClimatico,
   DisponibilidadForrajera,

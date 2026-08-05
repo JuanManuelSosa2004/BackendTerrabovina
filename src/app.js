@@ -12,6 +12,7 @@ app.use('/api/v2/estancia', require('./routes/estancia.routes'));
 app.use('/api/v2/potrero', require('./routes/potrero.routes'));
 app.use('/api/v2/ganado', require('./routes/ganado.routes'));
 app.use('/api/v2/asignacion-ganado', require('./routes/asignacionGanado.routes'));
+app.use('/api/v2/traslado-ganado', require('./routes/trasladoGanado.routes'));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

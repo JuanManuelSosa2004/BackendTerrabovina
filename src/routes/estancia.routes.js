@@ -5,6 +5,7 @@ const estanciaController = require('../controllers/estancia.controller');
 const potreroController = require('../controllers/potrero.controller');
 const ganadoController = require('../controllers/ganado.controller');
 const asignacionGanadoController = require('../controllers/asignacionGanado.controller');
+const trasladoGanadoController = require('../controllers/trasladoGanado.controller');
 const { requireAuth } = require('../middlewares/auth.middleware');
 const { requireEstanciaOwnership } = require('../middlewares/ownership.middleware');
 
@@ -33,6 +34,13 @@ router.get(
   '/:estanciaId/asignaciones-ganado',
   requireEstanciaOwnership(),
   asignacionGanadoController.listHistorialByEstancia
+);
+
+// traslado-ganado: analíticas agregadas de traslados de la estancia.
+router.get(
+  '/:estanciaId/analiticas/traslado-ganado',
+  requireEstanciaOwnership(),
+  trasladoGanadoController.analiticas
 );
 
 module.exports = router;

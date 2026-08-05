@@ -22,9 +22,13 @@ async function getGanadoDeEstancia(id_ganado, id_estancia, transaction) {
   return rows[0] ?? null;
 }
 
-// #23: desplaza uno o varios animales a un potrero, cerrando su
-// asignación vigente (si tenían) y abriendo una nueva, todo en una sola
-// transacción (docs/backend-gap-analysis.md §3, regla #23).
+// #23 (redefinido): cubre únicamente la primera asignación de un animal
+// que todavía no tiene potrero (por ejemplo, uno dado de alta vía POST
+// /estancia/:id/ganado sin potrero). Mover un animal que ya está asignado
+// es responsabilidad de POST /potrero/:potreroId/traslado-ganado, que
+// además deja auditoría del movimiento (quién, cuándo, por qué) — este
+// endpoint la rechaza explícitamente para no dejar dos caminos abiertos
+// para la misma operación.
 async function crear(req, res) {
   const { id_potrero } = req.body ?? {};
   const idsGanado = Array.isArray(req.body?.id_ganado) ? req.body.id_ganado : [req.body?.id_ganado];
@@ -55,7 +59,11 @@ async function crear(req, res) {
 
         const activa = await asignacionGanadoRepository.getAsignacionActivaByGanado(id_ganado, t);
         if (activa) {
-          await asignacionGanadoRepository.cerrarAsignacion(activa.id_asignacion, hoy, 'FINALIZADA', t);
+          const err = new Error(
+            `El animal ${id_ganado} ya tiene una asignación activa; para moverlo use POST /potrero/:potreroId/traslado-ganado.`
+          );
+          err.status = 400;
+          throw err;
         }
 
         const nueva = await asignacionGanadoRepository.crearAsignacion(
@@ -83,10 +91,51 @@ async function getById(req, res) {
   return res.json(asignacion);
 }
 
-// #25
+function parseVigente(value) {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+}
+
+// #25: historial de asignaciones de toda la estancia, con filtros
+// opcionales (potrero, animal, sólo vigentes, rango de fecha_desde).
 async function listHistorialByEstancia(req, res) {
-  const historial = await asignacionGanadoRepository.getHistorialByEstancia(req.estancia.id_estancia);
+  const { id_potrero, id_ganado, vigente, desde, hasta } = req.query;
+  const historial = await asignacionGanadoRepository.getHistorialByEstancia(req.estancia.id_estancia, {
+    id_potrero,
+    id_ganado,
+    vigente: parseVigente(vigente),
+    desde,
+    hasta,
+  });
   return res.json(historial);
 }
 
-module.exports = { crear, getById, listHistorialByEstancia };
+// requirePotreroOwnership ya validó pertenencia. A diferencia de
+// GET /potrero/:id/ganado (ganado.controller, sólo lo vigente), esto
+// devuelve todo el historial de ese potrero.
+async function listHistorialByPotrero(req, res) {
+  const { id_ganado, vigente, desde, hasta } = req.query;
+  const historial = await asignacionGanadoRepository.getHistorialByPotrero(req.potrero.id_potrero, {
+    id_ganado,
+    vigente: parseVigente(vigente),
+    desde,
+    hasta,
+  });
+  return res.json(historial);
+}
+
+// requireGanadoOwnership ya validó pertenencia. Complementa a
+// GET /ganado/:id/recorrido (trasladoGanado.controller, vista por
+// traslado): esta es la vista asignación a asignación.
+async function listHistorialByGanado(req, res) {
+  const { vigente, desde, hasta } = req.query;
+  const historial = await asignacionGanadoRepository.getHistorialByGanado(req.ganado.id_ganado, {
+    vigente: parseVigente(vigente),
+    desde,
+    hasta,
+  });
+  return res.json(historial);
+}
+
+module.exports = { crear, getById, listHistorialByEstancia, listHistorialByPotrero, listHistorialByGanado };

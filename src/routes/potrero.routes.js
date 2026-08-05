@@ -6,6 +6,8 @@ const ganadoController = require('../controllers/ganado.controller');
 const ndviClimaController = require('../controllers/ndviClima.controller');
 const estimacionController = require('../controllers/estimacion.controller');
 const recomendacionController = require('../controllers/recomendacion.controller');
+const trasladoGanadoController = require('../controllers/trasladoGanado.controller');
+const asignacionGanadoController = require('../controllers/asignacionGanado.controller');
 const { requireAuth } = require('../middlewares/auth.middleware');
 const { requirePotreroOwnership } = require('../middlewares/ownership.middleware');
 
@@ -38,5 +40,15 @@ router.get('/:potreroId/estimacion-nutricional/historico', estimacionController.
 // #34, #35
 router.post('/:potreroId/recomendacion', recomendacionController.crear);
 router.get('/:potreroId/recomendacion', recomendacionController.listar);
+
+// traslado-ganado: registra el movimiento de un lote de animales desde
+// este potrero (origen) hacia otro; el listado admite filtrar por
+// entradas o salidas de este mismo potrero.
+router.post('/:potreroId/traslado-ganado', trasladoGanadoController.crear);
+router.get('/:potreroId/traslado-ganado', trasladoGanadoController.listByPotrero);
+
+// asignacion-ganado: histórico completo de asignaciones de este potrero
+// (no sólo el ganado vigente, que ya resuelve GET /:potreroId/ganado).
+router.get('/:potreroId/asignaciones-ganado', asignacionGanadoController.listHistorialByPotrero);
 
 module.exports = router;

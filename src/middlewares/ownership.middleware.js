@@ -81,9 +81,29 @@ function requireAsignacionOwnership(paramName = 'asignacionId') {
   };
 }
 
+function requireTrasladoGanadoOwnership(paramName = 'trasladoId') {
+  return async (req, res, next) => {
+    const id = req.params[paramName];
+    const rows = await sequelize.query(
+      `SELECT t.id_traslado, t.id_estancia, e.id_usuario
+       FROM \`traslado_ganado\` t
+       JOIN \`estancia\` e ON e.id_estancia = t.id_estancia
+       WHERE t.id_traslado = :id`,
+      { replacements: { id }, type: QueryTypes.SELECT }
+    );
+    const traslado = rows[0];
+    if (!traslado || traslado.id_usuario !== req.usuario.id_usuario) {
+      return res.status(404).json(NOT_FOUND);
+    }
+    req.traslado = traslado;
+    next();
+  };
+}
+
 module.exports = {
   requireEstanciaOwnership,
   requirePotreroOwnership,
   requireGanadoOwnership,
   requireAsignacionOwnership,
+  requireTrasladoGanadoOwnership,
 };
