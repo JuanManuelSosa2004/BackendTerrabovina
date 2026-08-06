@@ -231,8 +231,8 @@ describe('PATCH /api/v2/ganado (batch update)', () => {
   test('con ids válidos, actualiza todos en una transacción y responde 200', async () => {
     const res = await authHeader(request(app).patch('/api/v2/ganado'), token).send({
       ganado: [
-        { id_ganado: idA, categoria: 'NOVILLO', peso_kg: 200 },
-        { id_ganado: idB, categoria: 'NOVILLO', peso_kg: 250 },
+        { id_ganado: idA, categoria: 'NOVILLO', sexo: 'M', peso_kg: 200 },
+        { id_ganado: idB, categoria: 'NOVILLO', sexo: 'M', peso_kg: 250 },
       ],
     });
     expect(res.status).toBe(200);

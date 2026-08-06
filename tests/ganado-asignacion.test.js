@@ -201,6 +201,42 @@ describe('Ganado', () => {
     expect(res.status).toBe(400);
   });
 
+  test('rechaza sexo que no corresponde a la categoria (VACA macho)', async () => {
+    const res = await authA(request(app).post(`/api/v2/estancia/${estanciaId}/ganado`)).send({
+      numero_identificacion: 'CARAVANA-VACA-MACHO',
+      sexo: 'M',
+      categoria: 'VACA',
+      peso_kg: 400,
+      condicion_corporal: 3,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('rechaza sexo que no corresponde a la categoria (TORO hembra)', async () => {
+    const res = await authA(request(app).post(`/api/v2/estancia/${estanciaId}/ganado`)).send({
+      numero_identificacion: 'CARAVANA-TORO-HEMBRA',
+      sexo: 'F',
+      categoria: 'TORO',
+      peso_kg: 400,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('TERNERO acepta cualquier sexo', async () => {
+    const res = await authA(request(app).post(`/api/v2/estancia/${estanciaId}/ganado`)).send({
+      numero_identificacion: 'CARAVANA-TERNERO-M',
+      sexo: 'M',
+      categoria: 'TERNERO',
+      peso_kg: 100,
+    });
+    expect(res.status).toBe(201);
+  });
+
+  test('PATCH rechaza cambiar la categoria a una que no corresponde al sexo actual del animal', async () => {
+    const res = await authA(request(app).patch(`/api/v2/ganado/${ganadoId}`)).send({ categoria: 'TORO' });
+    expect(res.status).toBe(400);
+  });
+
   test('rechaza numero_identificacion duplicado', async () => {
     const res = await authA(request(app).post(`/api/v2/estancia/${estanciaId}/ganado`)).send({
       numero_identificacion: 'CARAVANA-001',

@@ -3,6 +3,7 @@ const Usuario = require('./usuario.model');
 const PasswordResetToken = require('./passwordResetToken.model');
 const Estancia = require('./estancia.model');
 const Potrero = require('./potrero.model');
+const Empleado = require('./empleado.model');
 const Ganado = require('./ganado.model');
 const AsignacionGanado = require('./asignacionGanado.model');
 const TrasladoGanado = require('./trasladoGanado.model');
@@ -21,6 +22,9 @@ PasswordResetToken.belongsTo(Usuario, { foreignKey: 'id_usuario', as: 'usuario' 
 
 Estancia.hasMany(Potrero, { foreignKey: 'id_estancia', as: 'potreros' });
 Potrero.belongsTo(Estancia, { foreignKey: 'id_estancia', as: 'estancia' });
+
+Estancia.hasMany(Empleado, { foreignKey: 'id_estancia', as: 'empleados' });
+Empleado.belongsTo(Estancia, { foreignKey: 'id_estancia', as: 'estancia' });
 
 // El ganado cuelga directamente de la estancia (ya no de un rodeo, que
 // desapareció del DER V2). Su ubicación en un potrero, si la tiene, se
@@ -85,6 +89,7 @@ module.exports = {
   PasswordResetToken,
   Estancia,
   Potrero,
+  Empleado,
   Ganado,
   AsignacionGanado,
   TrasladoGanado,

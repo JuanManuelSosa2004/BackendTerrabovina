@@ -5,6 +5,7 @@ const asignacionGanadoRepository = require('../database/sql/asignacionGanado.rep
 const { sequelize } = require('../database/sequelize');
 const { isDuplicateEntryError } = require('../utils/dbErrors');
 const { validarPesoParaCategoria } = require('../utils/pesoRango');
+const { validarSexoParaCategoria } = require('../utils/sexoCategoria');
 
 const UPDATABLE_FIELDS = [
   'numero_identificacion',
@@ -29,7 +30,7 @@ function validarCamposGanado(body) {
   if (categoria === 'VACA' && condicion_corporal === undefined) {
     return 'condicion_corporal es obligatoria para categoria VACA.';
   }
-  return validarPesoParaCategoria(categoria, peso_kg);
+  return validarSexoParaCategoria(categoria, sexo) ?? validarPesoParaCategoria(categoria, peso_kg);
 }
 
 // #17: crea el animal sin potrero asignado.
@@ -132,11 +133,14 @@ async function update(req, res) {
     return res.status(400).json({ error: 'No hay campos para actualizar.' });
   }
 
-  if (fields.categoria !== undefined || fields.peso_kg !== undefined) {
+  if (fields.categoria !== undefined || fields.peso_kg !== undefined || fields.sexo !== undefined) {
     const actual = await ganadoRepository.getGanadoById(req.ganado.id_ganado);
-    const errorPeso = validarPesoParaCategoria(fields.categoria ?? actual.categoria, fields.peso_kg ?? actual.peso_kg);
-    if (errorPeso) {
-      return res.status(400).json({ error: errorPeso });
+    const categoria = fields.categoria ?? actual.categoria;
+    const errorValidacion =
+      validarSexoParaCategoria(categoria, fields.sexo ?? actual.sexo) ??
+      validarPesoParaCategoria(categoria, fields.peso_kg ?? actual.peso_kg);
+    if (errorValidacion) {
+      return res.status(400).json({ error: errorValidacion });
     }
   }
 
@@ -207,11 +211,14 @@ async function updateMultiple(req, res) {
       }
 
       for (const [id_ganado, fields] of fieldsById) {
-        if (fields.categoria === undefined && fields.peso_kg === undefined) continue;
+        if (fields.categoria === undefined && fields.peso_kg === undefined && fields.sexo === undefined) continue;
         const actual = await ganadoRepository.getGanadoById(id_ganado, t);
-        const errorPeso = validarPesoParaCategoria(fields.categoria ?? actual.categoria, fields.peso_kg ?? actual.peso_kg);
-        if (errorPeso) {
-          const err = new Error(`Animal ${id_ganado}: ${errorPeso}`);
+        const categoria = fields.categoria ?? actual.categoria;
+        const errorValidacion =
+          validarSexoParaCategoria(categoria, fields.sexo ?? actual.sexo) ??
+          validarPesoParaCategoria(categoria, fields.peso_kg ?? actual.peso_kg);
+        if (errorValidacion) {
+          const err = new Error(`Animal ${id_ganado}: ${errorValidacion}`);
           err.status = 400;
           throw err;
         }

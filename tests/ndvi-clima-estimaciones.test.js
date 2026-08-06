@@ -282,7 +282,7 @@ describe('POST /api/v2/potrero/:id/estimacion-nutricional', () => {
 
   test('agrega el dmi_kg_dia de cada animal y devuelve advertencias/predicciones sin persistirlas', async () => {
     const gA = await crearGanadoEnPotrero(token, id_potrero, { categoria: 'VACA', condicion_corporal: 3.5 });
-    const gB = await crearGanadoEnPotrero(token, id_potrero, { categoria: 'NOVILLO', peso_kg: 200 });
+    const gB = await crearGanadoEnPotrero(token, id_potrero, { categoria: 'NOVILLO', sexo: 'M', peso_kg: 200 });
 
     predictDmi.mockResolvedValueOnce(
       dmiResponse({ advertencias: [`${gB.body.id_ganado}: peso fuera de rango observado`] })

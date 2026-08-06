@@ -4,6 +4,7 @@ const express = require('express');
 const estanciaController = require('../controllers/estancia.controller');
 const potreroController = require('../controllers/potrero.controller');
 const ganadoController = require('../controllers/ganado.controller');
+const empleadoController = require('../controllers/empleado.controller');
 const asignacionGanadoController = require('../controllers/asignacionGanado.controller');
 const trasladoGanadoController = require('../controllers/trasladoGanado.controller');
 const analiticasConsumoController = require('../controllers/analiticasConsumo.controller');
@@ -29,6 +30,10 @@ router.get('/:estanciaId/potrero', requireEstanciaOwnership(), potreroController
 // #17, #19
 router.post('/:estanciaId/ganado', requireEstanciaOwnership(), ganadoController.createEnEstancia);
 router.get('/:estanciaId/ganado', requireEstanciaOwnership(), ganadoController.listByEstancia);
+
+// empleado: recurso propio de la estancia (nombre, rol, telefono).
+router.post('/:estanciaId/empleado', requireEstanciaOwnership(), empleadoController.create);
+router.get('/:estanciaId/empleado', requireEstanciaOwnership(), empleadoController.listByEstancia);
 
 // #25
 router.get(

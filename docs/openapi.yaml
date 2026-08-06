@@ -36,6 +36,8 @@ tags:
     description: Potreros dentro de una estancia.
   - name: Ganado
     description: Animales de una estancia.
+  - name: Empleado
+    description: Personal de una estancia (peones y capataces).
   - name: AsignacionGanado
     description: >-
       Vigencia de "animal en potrero" (fecha_desde/fecha_hasta). POST sólo
@@ -453,6 +455,42 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Ganado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /estancia/{estanciaId}/empleado:
+    parameters:
+      - $ref: "#/components/parameters/estanciaId"
+    post:
+      tags: [Empleado]
+      operationId: crearEmpleado
+      summary: Alta de un empleado de la estancia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmpleadoInput" }
+      responses:
+        "201":
+          description: Empleado creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Empleado" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      tags: [Empleado]
+      operationId: listarEmpleadosDeEstancia
+      summary: Listar los empleados activos de la estancia
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Empleado" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -1176,6 +1214,63 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /empleado/{empleadoId}:
+    parameters:
+      - $ref: "#/components/parameters/empleadoId"
+    get:
+      tags: [Empleado]
+      operationId: obtenerEmpleadoPorId
+      summary: Empleado por id
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Empleado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Empleado]
+      operationId: actualizarEmpleado
+      summary: Actualizar un empleado (parcial)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string }
+                rol: { $ref: "#/components/schemas/EmpleadoRol" }
+                telefono: { type: string, nullable: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Empleado" }
+        "400":
+          description: Body sin campos reconocidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Empleado]
+      operationId: eliminarEmpleado
+      summary: Dar de baja un empleado (baja lógica)
+      responses:
+        "200":
+          description: Baja lógica aplicada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean, example: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /ganado/{ganadoId}/recorrido:
     parameters:
       - $ref: "#/components/parameters/ganadoId"
@@ -1371,6 +1466,11 @@ components:
       in: path
       required: true
       schema: { type: integer }
+    empleadoId:
+      name: empleadoId
+      in: path
+      required: true
+      schema: { type: integer }
     asignacionId:
       name: asignacionId
       in: path
@@ -1530,6 +1630,10 @@ components:
     GanadoCategoria:
       type: string
       enum: [TERNERO, VAQUILLONA, NOVILLO, VACA, TORO]
+      description: >-
+        VACA/VAQUILLONA exigen sexo=F y NOVILLO/TORO exigen sexo=M (se
+        valida en el alta y en cualquier update que toque categoria o
+        sexo); TERNERO es la única categoría sin sexo fijo.
     GanadoEstadoFisiologico:
       type: string
       nullable: true
@@ -1573,6 +1677,30 @@ components:
           nullable: true
           description: Resuelto por la asignación vigente (fecha_hasta NULL); null si no tiene
         potrero_actual_nombre: { type: string, nullable: true }
+
+    EmpleadoRol:
+      type: string
+      enum: [PEON, CAPATAZ]
+
+    EmpleadoInput:
+      type: object
+      required: [nombre, rol]
+      properties:
+        nombre: { type: string }
+        rol: { $ref: "#/components/schemas/EmpleadoRol" }
+        telefono: { type: string, nullable: true }
+
+    Empleado:
+      type: object
+      properties:
+        id_empleado: { type: integer }
+        id_estancia: { type: integer }
+        nombre: { type: string }
+        rol: { $ref: "#/components/schemas/EmpleadoRol" }
+        telefono: { type: string, nullable: true }
+        activo: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     AsignacionGanadoEstado:
       type: string

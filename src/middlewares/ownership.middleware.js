@@ -61,6 +61,24 @@ function requireGanadoOwnership(paramName = 'ganadoId') {
   };
 }
 
+function requireEmpleadoOwnership(paramName = 'empleadoId') {
+  return async (req, res, next) => {
+    const id = req.params[paramName];
+    const rows = await sequelize.query(
+      `SELECT em.id_empleado, em.id_estancia, e.id_usuario
+       FROM \`empleado\` em JOIN \`estancia\` e ON e.id_estancia = em.id_estancia
+       WHERE em.id_empleado = :id`,
+      { replacements: { id }, type: QueryTypes.SELECT }
+    );
+    const empleado = rows[0];
+    if (!empleado || empleado.id_usuario !== req.usuario.id_usuario) {
+      return res.status(404).json(NOT_FOUND);
+    }
+    req.empleado = empleado;
+    next();
+  };
+}
+
 function requireAsignacionOwnership(paramName = 'asignacionId') {
   return async (req, res, next) => {
     const id = req.params[paramName];
@@ -104,6 +122,7 @@ module.exports = {
   requireEstanciaOwnership,
   requirePotreroOwnership,
   requireGanadoOwnership,
+  requireEmpleadoOwnership,
   requireAsignacionOwnership,
   requireTrasladoGanadoOwnership,
 };
