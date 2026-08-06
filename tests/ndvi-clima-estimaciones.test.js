@@ -282,7 +282,7 @@ describe('POST /api/v2/potrero/:id/estimacion-nutricional', () => {
 
   test('agrega el dmi_kg_dia de cada animal y devuelve advertencias/predicciones sin persistirlas', async () => {
     const gA = await crearGanadoEnPotrero(token, id_potrero, { categoria: 'VACA', condicion_corporal: 3.5 });
-    const gB = await crearGanadoEnPotrero(token, id_potrero, { categoria: 'NOVILLO' });
+    const gB = await crearGanadoEnPotrero(token, id_potrero, { categoria: 'NOVILLO', peso_kg: 200 });
 
     predictDmi.mockResolvedValueOnce(
       dmiResponse({ advertencias: [`${gB.body.id_ganado}: peso fuera de rango observado`] })
@@ -314,6 +314,28 @@ describe('POST /api/v2/potrero/:id/estimacion-nutricional', () => {
     );
     expect(historico.body.estimaciones).toHaveLength(1);
     expect(historico.body.estimaciones[0].advertencias).toBeUndefined();
+  });
+
+  test('mapea TERNERO/VAQUILLONA a las claves reales del modelo y siempre agrega las limitaciones generales', async () => {
+    const gTernero = await crearGanadoEnPotrero(token, id_potrero, { categoria: 'TERNERO', peso_kg: 150 });
+    const gVaquillona = await crearGanadoEnPotrero(token, id_potrero, { categoria: 'VAQUILLONA' });
+
+    predictDmi.mockResolvedValueOnce(dmiResponse());
+
+    const res = await authHeader(request(app).post(`/api/v2/potrero/${id_potrero}/estimacion-nutricional`), token);
+
+    expect(res.status).toBe(201);
+    expect(predictDmi).toHaveBeenCalledWith({
+      animales: expect.arrayContaining([
+        expect.objectContaining({ animal_id: String(gTernero.body.id_ganado), categoria_terrabovina: 'Ternero/Ternera' }),
+        expect.objectContaining({ animal_id: String(gVaquillona.body.id_ganado), categoria_terrabovina: 'Vaquilla' }),
+      ]),
+    });
+    expect(res.body.advertencias_generales).toEqual([
+      'El modelo fue entrenado con datos de sistemas productivos de Bomet, Kenia, no de Argentina.',
+      'No incluye clima, calidad ni disponibilidad del forraje como variables.',
+      'Debe validarse con datos locales antes de usarse para decisiones nutricionales reales en Argentina.',
+    ]);
   });
 
   test('si el modelo falla, no persiste ninguna estimación nueva', async () => {

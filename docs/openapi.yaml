@@ -53,6 +53,11 @@ tags:
     description: Disponibilidad forrajera y demanda nutricional, calculadas por el modelo predictivo externo.
   - name: Recomendaciones
     description: Cruce de oferta y demanda de un potrero con una regla de umbrales.
+  - name: Analiticas
+    description: >-
+      Datos agregados a nivel estancia para las gráficas del dashboard
+      (carga animal, forraje). No persiste nada, sólo agrega lo que ya
+      existe en Ganado y Estimaciones.
 
 paths:
   # ============================================================ AUTH ======
@@ -491,6 +496,22 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TrasladoGanadoAnaliticas" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /estancia/{estanciaId}/analiticas:
+    parameters:
+      - $ref: "#/components/parameters/estanciaId"
+    get:
+      tags: [Analiticas]
+      operationId: obtenerAnaliticasConsumo
+      summary: Analíticas agregadas de carga animal y forraje de la estancia (para el dashboard)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnaliticasConsumo" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -1676,6 +1697,50 @@ components:
           type: array
           items: { $ref: "#/components/schemas/TrasladoGanadoAnaliticasUltimo" }
 
+    AnaliticasCargaAnimalCategoria:
+      type: object
+      properties:
+        categoria: { $ref: "#/components/schemas/GanadoCategoria" }
+        cantidad_animales: { type: integer }
+
+    AnaliticasForrajePotrero:
+      type: object
+      properties:
+        id_potrero: { type: integer }
+        nombre: { type: string }
+        kg_materia_seca_total: { type: number, format: double }
+        porcentaje: { type: number, format: double, description: "% del total de kg MS de la estancia" }
+
+    AnaliticasCrecimientoForrajeDia:
+      type: object
+      properties:
+        fecha: { type: string, format: date }
+        kg_materia_seca_ha_promedio:
+          type: number
+          format: double
+          description: Promedio entre potreros de la estancia con medición ese día
+
+    AnaliticasConsumo:
+      type: object
+      properties:
+        distribucionCargaAnimal:
+          type: array
+          items: { $ref: "#/components/schemas/AnaliticasCargaAnimalCategoria" }
+          description: Torta de distribución de carga animal por categoría
+        distribucionForraje:
+          type: array
+          items: { $ref: "#/components/schemas/AnaliticasForrajePotrero" }
+          description: >-
+            Torta de distribución de forraje entre potreros, según la última
+            medición de disponibilidad_forrajera de cada uno; potreros sin
+            ninguna medición no aparecen
+        crecimientoForraje7dias:
+          type: array
+          items: { $ref: "#/components/schemas/AnaliticasCrecimientoForrajeDia" }
+          description: >-
+            Serie agregada de los últimos 7 días de calendario; puede tener
+            huecos si no se calculó disponibilidad forrajera ese día
+
     ObservacionSatelital:
       type: object
       properties:
@@ -1751,7 +1816,11 @@ components:
             advertencias:
               type: array
               items: { type: string }
-              description: Del modelo predictivo (ej. peso fuera de rango observado para la categoría); no se persisten
+              description: Del modelo predictivo, por animal (ej. peso fuera de rango observado para la categoría); no se persisten
+            advertencias_generales:
+              type: array
+              items: { type: string }
+              description: Limitaciones fijas del modelo (ej. entrenado con datos de Kenia, no incluye clima/forraje), no dependen del lote de animales; no se persisten
             predicciones:
               type: array
               items: { $ref: "#/components/schemas/DmiPrediccionAnimal" }

@@ -807,11 +807,11 @@ describe('PATCH /api/v2/ganado/:ganadoId', () => {
 
   test('actualiza peso y estado fisiológico', async () => {
     const res = await authHeader(request(app).patch(`/api/v2/ganado/${id_ganado}`), token).send({
-      peso_kg: 450,
+      peso_kg: 350,
       estado_fisiologico: 'L',
     });
     expect(res.status).toBe(200);
-    expect(Number(res.body.peso_kg)).toBe(450);
+    expect(Number(res.body.peso_kg)).toBe(350);
     expect(res.body.estado_fisiologico).toBe('L');
   });
 

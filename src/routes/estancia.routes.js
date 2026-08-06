@@ -6,6 +6,7 @@ const potreroController = require('../controllers/potrero.controller');
 const ganadoController = require('../controllers/ganado.controller');
 const asignacionGanadoController = require('../controllers/asignacionGanado.controller');
 const trasladoGanadoController = require('../controllers/trasladoGanado.controller');
+const analiticasConsumoController = require('../controllers/analiticasConsumo.controller');
 const { requireAuth } = require('../middlewares/auth.middleware');
 const { requireEstanciaOwnership } = require('../middlewares/ownership.middleware');
 
@@ -42,5 +43,9 @@ router.get(
   requireEstanciaOwnership(),
   trasladoGanadoController.analiticas
 );
+
+// consumo: analíticas agregadas para las gráficas de carga animal y
+// forraje del dashboard de la estancia.
+router.get('/:estanciaId/analiticas', requireEstanciaOwnership(), analiticasConsumoController.analiticas);
 
 module.exports = router;

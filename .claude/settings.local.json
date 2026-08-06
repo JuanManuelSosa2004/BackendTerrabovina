@@ -64,7 +64,8 @@
       "Bash(npx --yes @redocly/cli lint docs/openapi.yaml)",
       "Bash(python agregar_operation_ids.py)",
       "Bash(npm audit *)",
-      "Bash(pkill -f \"node src/index.js\")"
+      "Bash(pkill -f \"node src/index.js\")",
+      "Bash(tee /tmp/jestout.txt)"
     ]
   }
 }

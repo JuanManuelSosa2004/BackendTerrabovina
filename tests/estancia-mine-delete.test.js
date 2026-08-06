@@ -187,7 +187,7 @@ describe('DELETE /api/v2/estancia/:id', () => {
       numero_identificacion: 'DEL-ESTANCIA-001',
       sexo: 'M',
       categoria: 'NOVILLO',
-      peso_kg: 300,
+      peso_kg: 250,
     });
     expect(ganado.status).toBe(201);
 

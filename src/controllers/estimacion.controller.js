@@ -13,13 +13,27 @@ const { predictDmp, predictDmi, ModeloPredictivoError } = require('../services/m
 const VERSION_DMP = 'dmp-model';
 const VERSION_DMI = 'dmi-model';
 
+// Claves reales del modelo (metadata de dmi_model.joblib), no coinciden
+// 1 a 1 con GanadoCategoria: mandar 'Ternero' o 'Vaquillona' pegaba un
+// KeyError (HTTP 500) en /predict/dmi para el lote completo.
 const CATEGORIA_A_MODELO = {
-  TERNERO: 'Ternero',
-  VAQUILLONA: 'Vaquillona',
+  TERNERO: 'Ternero/Ternera',
+  VAQUILLONA: 'Vaquilla',
   NOVILLO: 'Novillo',
   VACA: 'Vaca',
   TORO: 'Toro',
 };
+
+// Limitaciones fijas del modelo (campo `limitations` de dmi_model.joblib
+// v1.0.0, entrenado 2026-07-23 sobre datos de Bomet, Kenia). La API del
+// modelo no las expone en /predict/dmi, así que se declaran acá; no
+// dependen de si algún animal está fuera de rango, por eso van aparte de
+// `advertencias`. Revisar si cambian cuando el modelo se reentrene.
+const LIMITACIONES_MODELO_DMI = [
+  'El modelo fue entrenado con datos de sistemas productivos de Bomet, Kenia, no de Argentina.',
+  'No incluye clima, calidad ni disponibilidad del forraje como variables.',
+  'Debe validarse con datos locales antes de usarse para decisiones nutricionales reales en Argentina.',
+];
 
 // #29: RF003/RF004 — le pide al modelo predictivo (servicio Flask externo,
 // ver docs/Screenshot_2.png) la imagen satelital, el vector climático y la
@@ -122,7 +136,9 @@ function aAnimalDelModelo(ganado) {
 // png); acá se suma su dmi_kg_dia para obtener el agregado que pide el
 // DER (EstimacionDemanda no tiene detalle por animal, ver
 // docs/backend-gap-analysis.md §3 nota sobre el #33 descartado). Las
-// advertencias del modelo viajan en la respuesta, no se persisten.
+// advertencias del modelo (por animal, ej. peso fuera de rango) y las
+// limitaciones generales del modelo (fijas, LIMITACIONES_MODELO_DMI)
+// viajan en la respuesta, no se persisten.
 async function crearEstimacionNutricional(req, res) {
   const id_potrero = req.potrero.id_potrero;
   const ganado = await ganadoRepository.getGanadoByPotrero(id_potrero);
@@ -155,6 +171,7 @@ async function crearEstimacionNutricional(req, res) {
   return res.status(201).json({
     ...estimacion,
     advertencias: prediccion.advertencias ?? [],
+    advertencias_generales: LIMITACIONES_MODELO_DMI,
     predicciones: prediccion.predicciones,
   });
 }

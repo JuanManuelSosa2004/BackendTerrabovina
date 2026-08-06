@@ -231,8 +231,8 @@ describe('PATCH /api/v2/ganado (batch update)', () => {
   test('con ids válidos, actualiza todos en una transacción y responde 200', async () => {
     const res = await authHeader(request(app).patch('/api/v2/ganado'), token).send({
       ganado: [
-        { id_ganado: idA, categoria: 'NOVILLO' },
-        { id_ganado: idB, categoria: 'NOVILLO', peso_kg: 350 },
+        { id_ganado: idA, categoria: 'NOVILLO', peso_kg: 200 },
+        { id_ganado: idB, categoria: 'NOVILLO', peso_kg: 250 },
       ],
     });
     expect(res.status).toBe(200);
@@ -242,7 +242,7 @@ describe('PATCH /api/v2/ganado (batch update)', () => {
     expect(categorias).toEqual(['NOVILLO', 'NOVILLO']);
 
     const getB = await authHeader(request(app).get(`/api/v2/ganado/${idB}`), token);
-    expect(Number(getB.body.peso_kg)).toBe(350);
+    expect(Number(getB.body.peso_kg)).toBe(250);
   });
 
   test('no permite actualizar ganado de otro usuario', async () => {

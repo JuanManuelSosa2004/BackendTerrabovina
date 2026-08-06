@@ -4,6 +4,7 @@ const ganadoRepository = require('../database/sql/ganado.repository');
 const asignacionGanadoRepository = require('../database/sql/asignacionGanado.repository');
 const { sequelize } = require('../database/sequelize');
 const { isDuplicateEntryError } = require('../utils/dbErrors');
+const { validarPesoParaCategoria } = require('../utils/pesoRango');
 
 const UPDATABLE_FIELDS = [
   'numero_identificacion',
@@ -28,7 +29,7 @@ function validarCamposGanado(body) {
   if (categoria === 'VACA' && condicion_corporal === undefined) {
     return 'condicion_corporal es obligatoria para categoria VACA.';
   }
-  return null;
+  return validarPesoParaCategoria(categoria, peso_kg);
 }
 
 // #17: crea el animal sin potrero asignado.
@@ -131,6 +132,14 @@ async function update(req, res) {
     return res.status(400).json({ error: 'No hay campos para actualizar.' });
   }
 
+  if (fields.categoria !== undefined || fields.peso_kg !== undefined) {
+    const actual = await ganadoRepository.getGanadoById(req.ganado.id_ganado);
+    const errorPeso = validarPesoParaCategoria(fields.categoria ?? actual.categoria, fields.peso_kg ?? actual.peso_kg);
+    if (errorPeso) {
+      return res.status(400).json({ error: errorPeso });
+    }
+  }
+
   try {
     const ganado = await ganadoRepository.updateGanado(req.ganado.id_ganado, fields);
     return res.json(ganado);
@@ -197,6 +206,17 @@ async function updateMultiple(req, res) {
         throw err;
       }
 
+      for (const [id_ganado, fields] of fieldsById) {
+        if (fields.categoria === undefined && fields.peso_kg === undefined) continue;
+        const actual = await ganadoRepository.getGanadoById(id_ganado, t);
+        const errorPeso = validarPesoParaCategoria(fields.categoria ?? actual.categoria, fields.peso_kg ?? actual.peso_kg);
+        if (errorPeso) {
+          const err = new Error(`Animal ${id_ganado}: ${errorPeso}`);
+          err.status = 400;
+          throw err;
+        }
+      }
+
       const resultados = [];
       for (const [id_ganado, fields] of fieldsById) {
         resultados.push(await ganadoRepository.updateGanado(id_ganado, fields, t));
@@ -208,6 +228,9 @@ async function updateMultiple(req, res) {
   } catch (error) {
     if (error.status === 404) {
       return res.status(404).json({ error: error.message, noEncontrados });
+    }
+    if (error.status === 400) {
+      return res.status(400).json({ error: error.message });
     }
     if (isDuplicateEntryError(error)) {
       return res.status(409).json({ error: 'Ya existe un animal con ese numero_identificacion.' });

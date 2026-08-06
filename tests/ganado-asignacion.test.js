@@ -242,7 +242,7 @@ describe('Ganado', () => {
       numero_identificacion: 'CARAVANA-002',
       sexo: 'M',
       categoria: 'NOVILLO',
-      peso_kg: 300,
+      peso_kg: 250,
     });
     expect(res.status).toBe(201);
     expect(res.body.id_potrero_actual).toBe(potreroId);
