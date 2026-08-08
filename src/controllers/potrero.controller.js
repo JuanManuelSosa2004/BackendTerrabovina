@@ -146,6 +146,7 @@ async function hasPotreroOverlap(idEstancia, polygon, excludePotreroId = null) {
     `SELECT COUNT(*) AS total
      FROM \`potrero\`
      WHERE id_estancia = :idEstancia
+       AND activo = TRUE
        AND geom IS NOT NULL
        ${excludeClause}
        AND ST_Intersects(geom, ST_GeomFromGeoJSON(:geojson, 1, 4326))`,
