@@ -65,7 +65,11 @@
       "Bash(python agregar_operation_ids.py)",
       "Bash(npm audit *)",
       "Bash(pkill -f \"node src/index.js\")",
-      "Bash(tee /tmp/jestout.txt)"
+      "Bash(tee /tmp/jestout.txt)",
+      "Bash(git --no-pager diff -- src/routes/potrero.routes.js)",
+      "Bash(git log *)",
+      "Bash(git --no-pager diff -- src/controllers/ganado.controller.js src/database/sql/asignacionGanado.repository.js src/routes/potrero.routes.js docs/openapi.yaml tests/ganado-asignacion.test.js)",
+      "Bash(echo \"JEST_EXIT_CODE=$?\")"
     ]
   }
 }

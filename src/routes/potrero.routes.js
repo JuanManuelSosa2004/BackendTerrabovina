@@ -24,10 +24,6 @@ router.delete('/:potreroId', potreroController.remove);
 router.post('/:potreroId/ganado', ganadoController.createEnPotrero);
 router.get('/:potreroId/ganado', ganadoController.listByPotrero);
 
-// Próximo secuencial para el número de caravana automático de este
-// potrero (no está en los 35 endpoints de la V2, ver ganado.controller).
-router.get('/:potreroId/ganado/siguiente-caravana', ganadoController.siguienteCaravana);
-
 // #26, #27, #28
 router.get('/:potreroId/ndvi', ndviClimaController.getNdviVigente);
 router.get('/:potreroId/ndvi/consulta-rango', ndviClimaController.getNdviHistorico);

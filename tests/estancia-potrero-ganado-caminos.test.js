@@ -702,6 +702,16 @@ describe('POST /api/v2/potrero/:potreroId/ganado (#18)', () => {
     expect(res.status).toBe(409);
   });
 
+  test('permite el mismo numero_identificacion en una estancia distinta', async () => {
+    const otraEstancia = await crearEstanciaPropia(tokenOtro, { nombre: 'Estancia Ajena Caravana' });
+    const otroPotrero = await crearPotreroPropio(tokenOtro, otraEstancia.body.id_estancia);
+
+    const res = await crearGanadoEnPotrero(tokenOtro, otroPotrero.body.id_potrero, {
+      numero_identificacion: 'E18-001',
+    });
+    expect(res.status).toBe(201);
+  });
+
   test('devuelve 404 para un potrero inexistente', async () => {
     const res = await authHeader(request(app).post('/api/v2/potrero/999999/ganado'), token).send({
       numero_identificacion: 'E18-404',

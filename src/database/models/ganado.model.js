@@ -13,10 +13,12 @@ const Ganado = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    // Único por estancia, no en toda la tabla (migración 20260808000001):
+    // dos estancias sin relación entre sí pueden tener animales con el
+    // mismo numero_identificacion sin chocar.
     numero_identificacion: {
       type: DataTypes.STRING(50),
       allowNull: false,
-      unique: true,
     },
     fecha_nacimiento: {
       type: DataTypes.DATEONLY,
@@ -60,6 +62,13 @@ const Ganado = sequelize.define(
     tableName: 'ganado',
     timestamps: true,
     underscored: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ['id_estancia', 'numero_identificacion'],
+        name: 'ganado_id_estancia_numero_identificacion_unique',
+      },
+    ],
   }
 );
 

@@ -298,23 +298,6 @@ async function listByPotrero(req, res) {
   return res.json(ganado);
 }
 
-// No está en los 35 endpoints de la V2: el frontend arma el número de
-// caravana como prefijo (iniciales estancia+potrero) + secuencial, pero
-// necesita que el secuencial salga de acá para no reusar el número de un
-// animal dado de baja (baja lógica; el secuencial local del front sólo
-// contaba animales activos y volvía a asignar números ya usados). Se basa
-// en el histórico de asignaciones del potrero, no en el ganado vigente,
-// porque ese histórico no baja al dar de baja un animal (ver
-// countGanadoHistoricoByPotrero). No reserva el número: sigue siendo
-// posible una colisión entre dos altas simultáneas, pero eso ya lo cubre
-// el UNIQUE de numero_identificacion + el 409 de createEnPotrero/
-// createEnEstancia, así que el frontend puede reintentar pidiendo este
-// endpoint de nuevo.
-async function siguienteCaravana(req, res) {
-  const total = await asignacionGanadoRepository.countGanadoHistoricoByPotrero(req.potrero.id_potrero);
-  return res.json({ siguiente_secuencial: total + 1 });
-}
-
 module.exports = {
   createEnEstancia,
   createEnPotrero,
@@ -325,5 +308,4 @@ module.exports = {
   remove,
   removeMultiple,
   listByPotrero,
-  siguienteCaravana,
 };

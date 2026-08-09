@@ -678,34 +678,6 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /potrero/{potreroId}/ganado/siguiente-caravana:
-    parameters:
-      - $ref: "#/components/parameters/potreroId"
-    get:
-      tags: [Ganado]
-      operationId: obtenerSiguienteCaravana
-      summary: Próximo secuencial para el número de caravana de este potrero
-      description: >-
-        No reserva el número ni garantiza unicidad por sí solo: se basa en
-        COUNT(DISTINCT id_ganado) sobre el histórico de AsignacionGanado del
-        potrero (no en el ganado vigente), para no repetir el secuencial de
-        un animal dado de baja. Ante una colisión entre dos altas
-        simultáneas, POST /potrero/{potreroId}/ganado responde 409 y el
-        cliente debe volver a pedir este endpoint.
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  siguiente_secuencial:
-                    type: integer
-                    example: 7
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "404": { $ref: "#/components/responses/NotFound" }
-
   /potrero/{potreroId}/asignaciones-ganado:
     parameters:
       - $ref: "#/components/parameters/potreroId"
@@ -1671,7 +1643,7 @@ components:
       type: object
       required: [numero_identificacion, sexo, categoria, peso_kg]
       properties:
-        numero_identificacion: { type: string, description: Único por estancia/sistema }
+        numero_identificacion: { type: string, description: Único dentro de la estancia (no en todo el sistema) }
         sexo: { $ref: "#/components/schemas/GanadoSexo" }
         categoria: { $ref: "#/components/schemas/GanadoCategoria" }
         peso_kg: { type: number, format: double }
