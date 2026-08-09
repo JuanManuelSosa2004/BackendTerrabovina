@@ -438,6 +438,23 @@ describe('GET /api/v2/estancia/:estanciaId/potrero (#13)', () => {
     expect(res.body.map((p) => p.nombre).sort()).toEqual(['P1', 'P2']);
   });
 
+  test('no incluye potreros dados de baja (soft delete)', async () => {
+    const inactivo = await crearPotreroPropio(token, id_estancia, { nombre: 'P3 Baja', geom: potreroPolygon(2) });
+    const id_inactivo = inactivo.body.id_potrero;
+
+    const del = await authHeader(request(app).delete(`/api/v2/potrero/${id_inactivo}`), token);
+    expect(del.status).toBe(200);
+
+    const res = await authHeader(request(app).get(`/api/v2/estancia/${id_estancia}/potrero`), token);
+    expect(res.status).toBe(200);
+    expect(res.body.map((p) => p.id_potrero)).not.toContain(id_inactivo);
+
+    // Sigue siendo consultable por id, sólo que ya no aparece en el listado.
+    const getRes = await authHeader(request(app).get(`/api/v2/potrero/${id_inactivo}`), token);
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.activo).toBe(0);
+  });
+
   test('devuelve 404 para una estancia inexistente', async () => {
     const res = await authHeader(request(app).get('/api/v2/estancia/999999/potrero'), token);
     expect(res.status).toBe(404);

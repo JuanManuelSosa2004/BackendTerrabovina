@@ -111,11 +111,10 @@ async function update(req, res) {
 // potrero o un animal individualmente.
 async function remove(req, res) {
   const id_estancia = req.estancia.id_estancia;
-  const [potreros, ganado] = await Promise.all([
+  const [potrerosActivos, ganado] = await Promise.all([
     potreroRepository.getPotrerosByEstancia(id_estancia),
     ganadoRepository.getGanadoByEstancia(id_estancia),
   ]);
-  const potrerosActivos = potreros.filter((p) => p.activo);
 
   if ((potrerosActivos.length > 0 || ganado.length > 0) && req.query.confirm !== 'true') {
     return res.status(409).json({

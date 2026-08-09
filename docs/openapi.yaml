@@ -404,7 +404,7 @@ paths:
     get:
       tags: [Potrero]
       operationId: listarPotrerosDeEstancia
-      summary: Listar los potreros de la estancia
+      summary: Listar los potreros activos de la estancia
       responses:
         "200":
           description: OK
@@ -675,6 +675,34 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Ganado" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /potrero/{potreroId}/ganado/siguiente-caravana:
+    parameters:
+      - $ref: "#/components/parameters/potreroId"
+    get:
+      tags: [Ganado]
+      operationId: obtenerSiguienteCaravana
+      summary: Próximo secuencial para el número de caravana de este potrero
+      description: >-
+        No reserva el número ni garantiza unicidad por sí solo: se basa en
+        COUNT(DISTINCT id_ganado) sobre el histórico de AsignacionGanado del
+        potrero (no en el ganado vigente), para no repetir el secuencial de
+        un animal dado de baja. Ante una colisión entre dos altas
+        simultáneas, POST /potrero/{potreroId}/ganado responde 409 y el
+        cliente debe volver a pedir este endpoint.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  siguiente_secuencial:
+                    type: integer
+                    example: 7
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 

@@ -469,3 +469,61 @@ describe('Potrero - baja lógica y desvinculación de ganado', () => {
     expect(potreroRes.body.activo).toBe(0);
   });
 });
+
+describe('GET /api/v2/potrero/:id/ganado/siguiente-caravana', () => {
+  const potreroCaravanaPolygon = {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [-60.19, -34.55],
+        [-60.15, -34.55],
+        [-60.15, -34.54],
+        [-60.19, -34.54],
+        [-60.19, -34.55],
+      ],
+    ],
+  };
+
+  let potreroCaravanaId;
+
+  beforeAll(async () => {
+    const potreroRes = await authA(request(app).post(`/api/v2/estancia/${estanciaId}/potrero`)).send({
+      nombre: 'Potrero Caravana Test',
+      geom: potreroCaravanaPolygon,
+    });
+    potreroCaravanaId = potreroRes.body.id_potrero;
+  });
+
+  test('empieza en 1 para un potrero sin animales', async () => {
+    const res = await authA(request(app).get(`/api/v2/potrero/${potreroCaravanaId}/ganado/siguiente-caravana`));
+    expect(res.status).toBe(200);
+    expect(res.body.siguiente_secuencial).toBe(1);
+  });
+
+  test('avanza con cada alta y no retrocede al dar de baja un animal', async () => {
+    const primero = await authA(request(app).post(`/api/v2/potrero/${potreroCaravanaId}/ganado`)).send({
+      numero_identificacion: 'CARAVANA-SEQ-001',
+      sexo: 'F',
+      categoria: 'VAQUILLONA',
+      peso_kg: 220,
+    });
+    expect(primero.status).toBe(201);
+
+    const trasPrimero = await authA(
+      request(app).get(`/api/v2/potrero/${potreroCaravanaId}/ganado/siguiente-caravana`)
+    );
+    expect(trasPrimero.body.siguiente_secuencial).toBe(2);
+
+    await authA(request(app).delete(`/api/v2/ganado/${primero.body.id_ganado}`));
+
+    const trasBaja = await authA(
+      request(app).get(`/api/v2/potrero/${potreroCaravanaId}/ganado/siguiente-caravana`)
+    );
+    expect(trasBaja.body.siguiente_secuencial).toBe(2);
+  });
+
+  test('404 si el potrero no pertenece al usuario', async () => {
+    const res = await authA(request(app).get(`/api/v2/potrero/${potreroOtraEstanciaId}/ganado/siguiente-caravana`));
+    expect(res.status).toBe(404);
+  });
+});

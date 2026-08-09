@@ -37,12 +37,16 @@ async function getPotreroById(id, transaction) {
   return { ...row, geom: parseGeoJsonColumn(row.geom) };
 }
 
+// El listado sólo expone potreros activos: un potrero dado de baja sigue
+// siendo consultable por id (getPotreroById), pero no debe reaparecer en
+// listados generales, igual que getGanadoByEstancia y
+// getEmpleadosByEstancia.
 async function getPotrerosByEstancia(id_estancia) {
   const rows = await sequelize.query(
     `SELECT id_potrero, id_estancia, nombre, descripcion, superficie_ha, activo,
             ST_AsGeoJSON(geom) AS geom, created_at, updated_at
      FROM \`potrero\`
-     WHERE id_estancia = :id_estancia
+     WHERE id_estancia = :id_estancia AND activo = TRUE
      ORDER BY nombre`,
     { replacements: { id_estancia }, type: QueryTypes.SELECT }
   );
