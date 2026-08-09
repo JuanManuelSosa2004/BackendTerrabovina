@@ -106,6 +106,19 @@ async function getHistorialByGanado(id_ganado, filtros = {}) {
   );
 }
 
+// Cuenta animales distintos que pasaron alguna vez por el potrero (no sólo
+// los vigentes): base del secuencial del numero_identificacion automático
+// (id_estancia-id_potrero-secuencial, ver ganado.controller#createEnPotrero)
+// para no reusar el número de un animal dado de baja (baja lógica, no
+// borra esta tabla, ver ganado.repository#darDeBaja).
+async function countGanadoHistoricoByPotrero(id_potrero, transaction) {
+  const rows = await sequelize.query(
+    `SELECT COUNT(DISTINCT id_ganado) AS total FROM \`asignacion_ganado\` WHERE id_potrero = :id_potrero`,
+    { replacements: { id_potrero }, type: QueryTypes.SELECT, transaction }
+  );
+  return Number(rows[0].total);
+}
+
 async function crearAsignacion({ id_ganado, id_potrero, fecha_desde, estado }, transaction) {
   const [insertId] = await sequelize.query(
     `INSERT INTO \`asignacion_ganado\` (id_ganado, id_potrero, fecha_desde, estado, created_at, updated_at)
@@ -153,6 +166,7 @@ module.exports = {
   getAsignacionById,
   getAsignacionActivaByGanado,
   getAsignacionesActivasByPotrero,
+  countGanadoHistoricoByPotrero,
   getHistorialByEstancia,
   getHistorialByPotrero,
   getHistorialByGanado,

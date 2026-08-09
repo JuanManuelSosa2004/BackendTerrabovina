@@ -22,10 +22,17 @@ const UPDATABLE_FIELDS = [
 // condicion_corporal es obligatoria sólo para categoria === 'VACA' (única
 // categoría relevada de forma sistemática para esa variable, ver
 // migración 20260801000001).
-function validarCamposGanado(body) {
+//
+// numero_identificacion sólo se exige acá para el alta sin potrero
+// (createEnEstancia): el alta con potrero (createEnPotrero) lo genera el
+// server (id_estancia-id_potrero-secuencial) y ese campo se ignora si el
+// cliente lo manda.
+function validarCamposGanado(body, { requiereNumeroIdentificacion = true } = {}) {
   const { numero_identificacion, sexo, categoria, peso_kg, condicion_corporal } = body ?? {};
-  if (!numero_identificacion || !sexo || !categoria || peso_kg === undefined) {
-    return 'numero_identificacion, sexo, categoria y peso_kg son obligatorios.';
+  if ((requiereNumeroIdentificacion && !numero_identificacion) || !sexo || !categoria || peso_kg === undefined) {
+    return requiereNumeroIdentificacion
+      ? 'numero_identificacion, sexo, categoria y peso_kg son obligatorios.'
+      : 'sexo, categoria y peso_kg son obligatorios.';
   }
   if (categoria === 'VACA' && condicion_corporal === undefined) {
     return 'condicion_corporal es obligatoria para categoria VACA.';
@@ -67,21 +74,38 @@ async function createEnEstancia(req, res) {
 // #18: crea el animal y su primera asignación en la misma transacción
 // (docs/backend-gap-analysis.md §3, regla #18); id_estancia se deriva del
 // potrero, no se recibe del cliente.
+//
+// numero_identificacion (número de caravana) lo arma el server con la
+// convención id_estancia-id_potrero-secuencial: se genera una sola vez acá
+// y queda fijo como texto plano, no se recalcula después. El "id_potrero"
+// del número identifica el potrero de alta, no el potrero actual — si el
+// animal se traslada o ese potrero se da de baja más adelante, el número
+// no cambia (igual que una caravana física real no se recambia cuando el
+// animal cambia de potrero). El potrero actual siempre se resuelve por
+// asignacion_ganado (ver id_potrero_actual en la respuesta), nunca por
+// este número.
+//
+// El secuencial sale de countGanadoHistoricoByPotrero: cuenta el histórico
+// completo de asignaciones del potrero (no sólo el ganado vigente), para
+// no reusar el número de un animal dado de baja.
 async function createEnPotrero(req, res) {
-  const errorValidacion = validarCamposGanado(req.body);
+  const errorValidacion = validarCamposGanado(req.body, { requiereNumeroIdentificacion: false });
   if (errorValidacion) {
     return res.status(400).json({ error: errorValidacion });
   }
 
-  const { numero_identificacion, fecha_nacimiento, sexo, categoria, peso_kg, condicion_corporal, estado_fisiologico, observaciones } =
-    req.body;
+  const { fecha_nacimiento, sexo, categoria, peso_kg, condicion_corporal, estado_fisiologico, observaciones } = req.body;
   const id_potrero = req.potrero.id_potrero;
+  const id_estancia = req.potrero.id_estancia;
 
   try {
     const ganado = await sequelize.transaction(async (t) => {
+      const secuencial = (await asignacionGanadoRepository.countGanadoHistoricoByPotrero(id_potrero, t)) + 1;
+      const numero_identificacion = `${id_estancia}-${id_potrero}-${secuencial}`;
+
       const nuevo = await ganadoRepository.createGanado(
         {
-          id_estancia: req.potrero.id_estancia,
+          id_estancia,
           numero_identificacion,
           fecha_nacimiento,
           sexo,
@@ -103,7 +127,10 @@ async function createEnPotrero(req, res) {
     return res.status(201).json(await ganadoRepository.getGanadoById(ganado.id_ganado));
   } catch (error) {
     if (isDuplicateEntryError(error)) {
-      return res.status(409).json({ error: 'Ya existe un animal con ese numero_identificacion.' });
+      // Colisión entre dos altas simultáneas en el mismo potrero (mismo
+      // secuencial calculado antes de que la otra terminara de insertar):
+      // el cliente puede simplemente reintentar la solicitud.
+      return res.status(409).json({ error: 'Colisión generando numero_identificacion, reintente la solicitud.' });
     }
     throw error;
   }

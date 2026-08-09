@@ -643,12 +643,16 @@ paths:
       tags: [Ganado]
       operationId: crearGanadoEnPotrero
       summary: Alta de un animal ya asignado al potrero
-      description: Crea el animal y su primera AsignacionGanado (ACTIVA) en una sola transacción.
+      description: >-
+        Crea el animal y su primera AsignacionGanado (ACTIVA) en una sola
+        transacción. numero_identificacion (caravana) lo genera el server
+        con la convención id_estancia-id_potrero-secuencial y queda fijo
+        desde el alta, aunque el animal se traslade después a otro potrero.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/GanadoInput" }
+            schema: { $ref: "#/components/schemas/GanadoInputEnPotrero" }
       responses:
         "201":
           description: Animal creado (id_potrero_actual = este potrero)
@@ -659,7 +663,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: numero_identificacion duplicado
+          description: Colisión generando numero_identificacion (dos altas simultáneas); reintente
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -1644,6 +1648,26 @@ components:
       required: [numero_identificacion, sexo, categoria, peso_kg]
       properties:
         numero_identificacion: { type: string, description: Único dentro de la estancia (no en todo el sistema) }
+        sexo: { $ref: "#/components/schemas/GanadoSexo" }
+        categoria: { $ref: "#/components/schemas/GanadoCategoria" }
+        peso_kg: { type: number, format: double }
+        condicion_corporal:
+          type: number
+          format: double
+          nullable: true
+          description: Obligatoria únicamente si categoria = VACA
+        fecha_nacimiento: { type: string, format: date, nullable: true }
+        estado_fisiologico: { $ref: "#/components/schemas/GanadoEstadoFisiologico" }
+        observaciones: { type: string, nullable: true }
+
+    GanadoInputEnPotrero:
+      type: object
+      description: >-
+        Igual que GanadoInput pero sin numero_identificacion: el alta con
+        potrero lo genera el server (id_estancia-id_potrero-secuencial). Si
+        el cliente lo manda, se ignora.
+      required: [sexo, categoria, peso_kg]
+      properties:
         sexo: { $ref: "#/components/schemas/GanadoSexo" }
         categoria: { $ref: "#/components/schemas/GanadoCategoria" }
         peso_kg: { type: number, format: double }
