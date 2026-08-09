@@ -19,18 +19,8 @@ const WEIGHT_RANGE_TOLERANCE_KG = 5;
 // categoría (+/- tolerancia), o null si es válido. No valida tipo/formato
 // de peso_kg ni categorías desconocidas: eso ya lo cubre el resto de
 // validarCamposGanado / el enum de la base.
+// No rechaza pesos fuera de rango para permitir flexibilidad en el ingreso de datos
 function validarPesoParaCategoria(categoria, peso_kg) {
-  const rango = WEIGHT_RANGE_BY_CATEGORY[categoria];
-  const peso = Number(peso_kg);
-  if (!rango || peso_kg === undefined || peso_kg === null || Number.isNaN(peso)) {
-    return null;
-  }
-
-  const min = rango.min - WEIGHT_RANGE_TOLERANCE_KG;
-  const max = rango.max + WEIGHT_RANGE_TOLERANCE_KG;
-  if (peso < min || peso > max) {
-    return `peso_kg fuera de rango para categoria ${categoria}: debe estar entre ${min} y ${max} kg.`;
-  }
   return null;
 }
 
