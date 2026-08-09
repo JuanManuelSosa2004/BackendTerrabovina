@@ -210,4 +210,35 @@ describe('GET /api/v2/estancia/:estanciaId/analiticas', () => {
     const promedios = res.body.crecimientoForraje7dias.map((d) => d.kg_materia_seca_ha_promedio).sort((a, b) => a - b);
     expect(promedios).toEqual([75, 80, 90]);
   });
+
+  test('no incluye forraje de un potrero dado de baja', async () => {
+    const potreroCRes = await authHeader(request(app).post(`/api/v2/estancia/${id_estancia}/potrero`), token).send({
+      nombre: 'Potrero C Baja',
+      geom: potreroPolygon(2),
+      superficie_ha: 5,
+    });
+    const potreroC = potreroCRes.body.id_potrero;
+
+    await disponibilidadForrajeraRepository.crear({
+      id_potrero: potreroC,
+      fecha_calculo: fechaHaceNDias(0),
+      kg_materia_seca_ha: 500,
+      superficie_analizada_ha: 5,
+      version_modelo: 'test',
+    });
+
+    const baja = await authHeader(request(app).delete(`/api/v2/potrero/${potreroC}`), token);
+    expect(baja.status).toBe(200);
+
+    const res = await authHeader(request(app).get(`/api/v2/estancia/${id_estancia}/analiticas`), token);
+    expect(res.status).toBe(200);
+
+    expect(res.body.distribucionForraje.find((p) => p.id_potrero === potreroC)).toBeUndefined();
+
+    // El promedio de "hoy" sigue siendo A(100) + B(50) = 75; si C (500)
+    // entrara al promedio, este valor cambiaría.
+    const hoy = new Date().toISOString().slice(0, 10);
+    const promedioHoy = res.body.crecimientoForraje7dias.find((d) => String(d.fecha).slice(0, 10) === hoy);
+    expect(promedioHoy.kg_materia_seca_ha_promedio).toBeCloseTo(75, 1);
+  });
 });

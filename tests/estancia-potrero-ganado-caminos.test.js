@@ -657,6 +657,14 @@ describe('POST /api/v2/estancia/:estanciaId/ganado (#17)', () => {
     expect(res.status).toBe(404);
   });
 
+  test('permite el mismo numero_identificacion en una estancia distinta', async () => {
+    const otraEstancia = await crearEstanciaPropia(tokenOtro, { nombre: 'Estancia Ajena Caravana' });
+    const res = await crearGanadoEnEstancia(tokenOtro, otraEstancia.body.id_estancia, {
+      numero_identificacion: 'E17-001',
+    });
+    expect(res.status).toBe(201);
+  });
+
   test('sin token de sesión devuelve 401', async () => {
     const res = await request(app)
       .post(`/api/v2/estancia/${id_estancia}/ganado`)
@@ -666,20 +674,39 @@ describe('POST /api/v2/estancia/:estanciaId/ganado (#17)', () => {
 });
 
 describe('POST /api/v2/potrero/:potreroId/ganado (#18)', () => {
-  let token, tokenOtro, id_potrero;
+  let token, tokenOtro, id_estancia, id_potrero;
 
   beforeAll(async () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Ganado en Potrero' });
-    const potrero = await crearPotreroPropio(token, estancia.body.id_estancia);
+    id_estancia = estancia.body.id_estancia;
+    const potrero = await crearPotreroPropio(token, id_estancia);
     id_potrero = potrero.body.id_potrero;
     ({ token: tokenOtro } = await crearUsuario());
   });
 
-  test('crea el animal ya asignado al potrero', async () => {
-    const res = await crearGanadoEnPotrero(token, id_potrero, { numero_identificacion: 'E18-001' });
+  test('crea el animal ya asignado al potrero, con numero_identificacion generado por el server', async () => {
+    const res = await crearGanadoEnPotrero(token, id_potrero, {});
     expect(res.status).toBe(201);
     expect(res.body.id_potrero_actual).toBe(id_potrero);
+    expect(res.body.numero_identificacion).toBe(`${id_estancia}-${id_potrero}-1`);
+  });
+
+  test('el secuencial avanza con cada alta y no retrocede al dar de baja un animal', async () => {
+    const segundo = await crearGanadoEnPotrero(token, id_potrero, {});
+    expect(segundo.body.numero_identificacion).toBe(`${id_estancia}-${id_potrero}-2`);
+
+    await authHeader(request(app).delete(`/api/v2/ganado/${segundo.body.id_ganado}`), token);
+
+    const tercero = await crearGanadoEnPotrero(token, id_potrero, {});
+    expect(tercero.body.numero_identificacion).toBe(`${id_estancia}-${id_potrero}-3`);
+  });
+
+  test('ignora cualquier numero_identificacion que mande el cliente', async () => {
+    const res = await crearGanadoEnPotrero(token, id_potrero, { numero_identificacion: 'IGNORADO' });
+    expect(res.status).toBe(201);
+    expect(res.body.numero_identificacion).not.toBe('IGNORADO');
+    expect(res.body.numero_identificacion).toMatch(new RegExp(`^${id_estancia}-${id_potrero}-\\d+$`));
   });
 
   test('rechaza campos obligatorios faltantes', async () => {
@@ -690,31 +717,12 @@ describe('POST /api/v2/potrero/:potreroId/ganado (#18)', () => {
   });
 
   test('exige condicion_corporal para categoria VACA', async () => {
-    const res = await crearGanadoEnPotrero(token, id_potrero, {
-      numero_identificacion: 'E18-VACA-SIN-CC',
-      categoria: 'VACA',
-    });
+    const res = await crearGanadoEnPotrero(token, id_potrero, { categoria: 'VACA' });
     expect(res.status).toBe(400);
-  });
-
-  test('rechaza numero_identificacion duplicado', async () => {
-    const res = await crearGanadoEnPotrero(token, id_potrero, { numero_identificacion: 'E18-001' });
-    expect(res.status).toBe(409);
-  });
-
-  test('permite el mismo numero_identificacion en una estancia distinta', async () => {
-    const otraEstancia = await crearEstanciaPropia(tokenOtro, { nombre: 'Estancia Ajena Caravana' });
-    const otroPotrero = await crearPotreroPropio(tokenOtro, otraEstancia.body.id_estancia);
-
-    const res = await crearGanadoEnPotrero(tokenOtro, otroPotrero.body.id_potrero, {
-      numero_identificacion: 'E18-001',
-    });
-    expect(res.status).toBe(201);
   });
 
   test('devuelve 404 para un potrero inexistente', async () => {
     const res = await authHeader(request(app).post('/api/v2/potrero/999999/ganado'), token).send({
-      numero_identificacion: 'E18-404',
       sexo: 'F',
       categoria: 'VAQUILLONA',
       peso_kg: 200,
@@ -723,7 +731,7 @@ describe('POST /api/v2/potrero/:potreroId/ganado (#18)', () => {
   });
 
   test('devuelve 404 para un potrero ajeno', async () => {
-    const res = await crearGanadoEnPotrero(tokenOtro, id_potrero, { numero_identificacion: 'E18-AJENO' });
+    const res = await crearGanadoEnPotrero(tokenOtro, id_potrero, {});
     expect(res.status).toBe(404);
   });
 
@@ -755,15 +763,15 @@ describe('GET /api/v2/estancia/:estanciaId/ganado (#19)', () => {
 
   test('lista el ganado con y sin potrero asignado', async () => {
     await crearGanadoEnEstancia(token, id_estancia, { numero_identificacion: 'E19-SIN-POTRERO' });
-    await crearGanadoEnPotrero(token, id_potrero, { numero_identificacion: 'E19-CON-POTRERO' });
+    await crearGanadoEnPotrero(token, id_potrero, {});
 
     const res = await authHeader(request(app).get(`/api/v2/estancia/${id_estancia}/ganado`), token);
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(2);
 
-    const sinPotrero = res.body.find((g) => g.numero_identificacion === 'E19-SIN-POTRERO');
-    const conPotrero = res.body.find((g) => g.numero_identificacion === 'E19-CON-POTRERO');
-    expect(sinPotrero.id_potrero_actual).toBeNull();
+    const sinPotrero = res.body.find((g) => g.id_potrero_actual === null);
+    const conPotrero = res.body.find((g) => g.id_potrero_actual === id_potrero);
+    expect(sinPotrero.numero_identificacion).toBe('E19-SIN-POTRERO');
     expect(conPotrero.id_potrero_actual).toBe(id_potrero);
   });
 
@@ -895,7 +903,7 @@ describe('DELETE /api/v2/ganado/:ganadoId (#21)', () => {
   });
 
   test('da de baja un animal con asignación activa y la cierra', async () => {
-    const ganado = await crearGanadoEnPotrero(token, id_potrero, { numero_identificacion: 'E21-CON-POTRERO' });
+    const ganado = await crearGanadoEnPotrero(token, id_potrero, {});
     const id_ganado = ganado.body.id_ganado;
 
     const res = await authHeader(request(app).delete(`/api/v2/ganado/${id_ganado}`), token);
@@ -948,7 +956,7 @@ describe('GET /api/v2/potrero/:potreroId/ganado (#22)', () => {
   });
 
   test('lista el ganado con asignación vigente en el potrero', async () => {
-    const ganado = await crearGanadoEnPotrero(token, id_potrero, { numero_identificacion: 'E22-001' });
+    const ganado = await crearGanadoEnPotrero(token, id_potrero, {});
     const res = await authHeader(request(app).get(`/api/v2/potrero/${id_potrero}/ganado`), token);
     expect(res.status).toBe(200);
     expect(res.body.find((g) => g.id_ganado === ganado.body.id_ganado)).toBeDefined();

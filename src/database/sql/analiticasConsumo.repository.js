@@ -33,7 +33,7 @@ async function getAnaliticasConsumo(id_estancia) {
               ROW_NUMBER() OVER (PARTITION BY df.id_potrero ORDER BY df.fecha_calculo DESC, df.id_disponibilidad DESC) AS rn
        FROM \`disponibilidad_forrajera\` df
        JOIN \`potrero\` p2 ON p2.id_potrero = df.id_potrero
-       WHERE p2.id_estancia = :id_estancia
+       WHERE p2.id_estancia = :id_estancia AND p2.activo = TRUE
      ) ranked
      JOIN \`potrero\` p ON p.id_potrero = ranked.id_potrero
      WHERE ranked.rn = 1`,
@@ -65,6 +65,7 @@ async function getAnaliticasConsumo(id_estancia) {
      FROM \`disponibilidad_forrajera\` df
      JOIN \`potrero\` p ON p.id_potrero = df.id_potrero
      WHERE p.id_estancia = :id_estancia
+       AND p.activo = TRUE
        AND df.fecha_calculo >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
      GROUP BY DATE(df.fecha_calculo)
      ORDER BY fecha ASC`,
