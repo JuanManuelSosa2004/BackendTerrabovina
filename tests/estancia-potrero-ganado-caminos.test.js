@@ -17,20 +17,32 @@ function polygon(coords) {
   return { type: 'Polygon', coordinates: [coords] };
 }
 
-function bigPolygon() {
+// boxIndex desplaza el rectángulo 12° en longitud: cada llamada a
+// crearEstanciaPropia() en este archivo recibe una boxIndex propia
+// (contador global más abajo) para que su estancia ocupe territorio
+// propio. Sin esto, la validación de solape entre estancias
+// (estancia.controller.js#hasEstanciaOverlap) rechaza cualquier estancia
+// creada después de la primera, porque este archivo crea ~18 estancias
+// (una por describe) todas con el mismo rectángulo por defecto.
+// boxIndex 0 reproduce exactamente el bigPolygon() original.
+function bigPolygon(boxIndex = 0) {
+  const lonBase = -70 + boxIndex * 12;
   return polygon([
-    [-70, -40],
-    [-60, -40],
-    [-60, -30],
-    [-70, -30],
-    [-70, -40],
+    [lonBase, -40],
+    [lonBase + 10, -40],
+    [lonBase + 10, -30],
+    [lonBase, -30],
+    [lonBase, -40],
   ]);
 }
 
-// Cajas de 0.3° separadas por 0.5°: hasta ~19 potreros por estancia sin
-// solaparse entre sí, todas dentro de bigPolygon().
-function potreroPolygon(index) {
-  const lon0 = -69 + index * 0.5;
+// Cajas de 0.3° separadas por 0.5° dentro de bigPolygon(boxIndex): hasta
+// ~19 potreros por estancia sin solaparse entre sí. boxIndex debe
+// coincidir con el de la estancia que los contiene (estancia.boxIndex,
+// ver crearEstanciaPropia).
+function potreroPolygon(index, boxIndex = 0) {
+  const lonBase = -70 + boxIndex * 12;
+  const lon0 = lonBase + 1 + index * 0.5;
   const lat0 = -39;
   return polygon([
     [lon0, lat0],
@@ -78,12 +90,20 @@ async function crearUsuario() {
   return { token: login.body.token, id_usuario: login.body.usuario.id_usuario };
 }
 
-function crearEstanciaPropia(token, overrides = {}) {
-  return authHeader(request(app).post('/api/v2/estancia'), token).send({
+let nextBoxIndex = 0;
+
+async function crearEstanciaPropia(token, overrides = {}) {
+  const boxIndex = nextBoxIndex++;
+  const geom = overrides.geom ?? bigPolygon(boxIndex);
+  const res = await authHeader(request(app).post('/api/v2/estancia'), token).send({
     nombre: 'Estancia CRUD',
-    geom: bigPolygon(),
     ...overrides,
+    geom,
   });
+  // Se expone para que los describes que también crean potreros puedan
+  // ubicarlos dentro de la misma boxIndex vía potreroPolygon(i, boxIndex).
+  res.boxIndex = boxIndex;
+  return res;
 }
 
 function crearPotreroPropio(token, id_estancia, overrides = {}) {
@@ -257,13 +277,14 @@ describe('GET /api/v2/estancia/:estanciaId (#9)', () => {
 });
 
 describe('PATCH /api/v2/estancia/:estanciaId (#10)', () => {
-  let token, tokenOtro, id_estancia, id_potrero;
+  let token, tokenOtro, id_estancia, id_potrero, boxIndex;
 
   beforeAll(async () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Original' });
     id_estancia = estancia.body.id_estancia;
-    const potrero = await crearPotreroPropio(token, id_estancia, { geom: potreroPolygon(0) });
+    boxIndex = estancia.boxIndex;
+    const potrero = await crearPotreroPropio(token, id_estancia, { geom: potreroPolygon(0, boxIndex) });
     id_potrero = potrero.body.id_potrero;
     ({ token: tokenOtro } = await crearUsuario());
   });
@@ -276,7 +297,7 @@ describe('PATCH /api/v2/estancia/:estanciaId (#10)', () => {
     expect(res.status).toBe(200);
     expect(res.body.nombre).toBe('Renombrada');
     expect(res.body.departamento).toBe('Nuevo Depto');
-    expect(res.body.geom).toEqual(bigPolygon());
+    expect(res.body.geom).toEqual(bigPolygon(boxIndex));
   });
 
   test('rechaza geom con latitud fuera de rango', async () => {
@@ -307,12 +328,16 @@ describe('PATCH /api/v2/estancia/:estanciaId (#10)', () => {
   });
 
   test('actualiza el geom cuando sigue conteniendo a los potreros existentes', async () => {
+    // Un margen de 1° sobre el propio bigPolygon(boxIndex), no un
+    // rectángulo absoluto: de lo contrario pisa el territorio de la
+    // estancia box 0 (describe #7), que queda activa toda la corrida.
+    const lonBase = -70 + boxIndex * 12;
     const nuevoGeom = polygon([
-      [-71, -41],
-      [-59, -41],
-      [-59, -29],
-      [-71, -29],
-      [-71, -41],
+      [lonBase - 1, -41],
+      [lonBase + 11, -41],
+      [lonBase + 11, -29],
+      [lonBase - 1, -29],
+      [lonBase - 1, -41],
     ]);
     const res = await authHeader(request(app).patch(`/api/v2/estancia/${id_estancia}`), token).send({
       geom: nuevoGeom,
@@ -340,12 +365,13 @@ describe('PATCH /api/v2/estancia/:estanciaId (#10)', () => {
 });
 
 describe('POST /api/v2/estancia/:estanciaId/potrero (#12)', () => {
-  let token, tokenOtro, id_estancia;
+  let token, tokenOtro, id_estancia, boxIndex;
 
   beforeAll(async () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Potrero POST' });
     id_estancia = estancia.body.id_estancia;
+    boxIndex = estancia.boxIndex;
     ({ token: tokenOtro } = await crearUsuario());
   });
 
@@ -354,7 +380,7 @@ describe('POST /api/v2/estancia/:estanciaId/potrero (#12)', () => {
       nombre: 'Potrero 1',
       descripcion: 'desc',
       superficie_ha: 10,
-      geom: potreroPolygon(0),
+      geom: potreroPolygon(0, boxIndex),
     });
     expect(res.status).toBe(201);
     expect(res.body.id_estancia).toBe(id_estancia);
@@ -364,7 +390,7 @@ describe('POST /api/v2/estancia/:estanciaId/potrero (#12)', () => {
 
   test('rechaza sin nombre', async () => {
     const res = await authHeader(request(app).post(`/api/v2/estancia/${id_estancia}/potrero`), token).send({
-      geom: potreroPolygon(1),
+      geom: potreroPolygon(1, boxIndex),
     });
     expect(res.status).toBe(400);
   });
@@ -387,38 +413,39 @@ describe('POST /api/v2/estancia/:estanciaId/potrero (#12)', () => {
   });
 
   test('rechaza un polígono solapado con un potrero existente', async () => {
-    const res = await crearPotreroPropio(token, id_estancia, { nombre: 'Solapado', geom: potreroPolygon(0) });
+    const res = await crearPotreroPropio(token, id_estancia, { nombre: 'Solapado', geom: potreroPolygon(0, boxIndex) });
     expect(res.status).toBe(400);
   });
 
   test('devuelve 404 para una estancia inexistente', async () => {
     const res = await authHeader(request(app).post('/api/v2/estancia/999999/potrero'), token).send({
       nombre: 'X',
-      geom: potreroPolygon(2),
+      geom: potreroPolygon(2, boxIndex),
     });
     expect(res.status).toBe(404);
   });
 
   test('devuelve 404 para una estancia ajena', async () => {
-    const res = await crearPotreroPropio(tokenOtro, id_estancia, { geom: potreroPolygon(2) });
+    const res = await crearPotreroPropio(tokenOtro, id_estancia, { geom: potreroPolygon(2, boxIndex) });
     expect(res.status).toBe(404);
   });
 
   test('sin token de sesión devuelve 401', async () => {
     const res = await request(app)
       .post(`/api/v2/estancia/${id_estancia}/potrero`)
-      .send({ nombre: 'X', geom: potreroPolygon(2) });
+      .send({ nombre: 'X', geom: potreroPolygon(2, boxIndex) });
     expect(res.status).toBe(401);
   });
 });
 
 describe('GET /api/v2/estancia/:estanciaId/potrero (#13)', () => {
-  let token, tokenOtro, id_estancia;
+  let token, tokenOtro, id_estancia, boxIndex;
 
   beforeAll(async () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Potrero GET' });
     id_estancia = estancia.body.id_estancia;
+    boxIndex = estancia.boxIndex;
     ({ token: tokenOtro } = await crearUsuario());
   });
 
@@ -429,8 +456,8 @@ describe('GET /api/v2/estancia/:estanciaId/potrero (#13)', () => {
   });
 
   test('lista los potreros creados', async () => {
-    await crearPotreroPropio(token, id_estancia, { nombre: 'P1', geom: potreroPolygon(0) });
-    await crearPotreroPropio(token, id_estancia, { nombre: 'P2', geom: potreroPolygon(1) });
+    await crearPotreroPropio(token, id_estancia, { nombre: 'P1', geom: potreroPolygon(0, boxIndex) });
+    await crearPotreroPropio(token, id_estancia, { nombre: 'P2', geom: potreroPolygon(1, boxIndex) });
 
     const res = await authHeader(request(app).get(`/api/v2/estancia/${id_estancia}/potrero`), token);
     expect(res.status).toBe(200);
@@ -439,7 +466,7 @@ describe('GET /api/v2/estancia/:estanciaId/potrero (#13)', () => {
   });
 
   test('no incluye potreros dados de baja (soft delete)', async () => {
-    const inactivo = await crearPotreroPropio(token, id_estancia, { nombre: 'P3 Baja', geom: potreroPolygon(2) });
+    const inactivo = await crearPotreroPropio(token, id_estancia, { nombre: 'P3 Baja', geom: potreroPolygon(2, boxIndex) });
     const id_inactivo = inactivo.body.id_potrero;
 
     const del = await authHeader(request(app).delete(`/api/v2/potrero/${id_inactivo}`), token);
@@ -477,7 +504,10 @@ describe('GET /api/v2/potrero/:potreroId (#14)', () => {
   beforeAll(async () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Potrero GET id' });
-    const potrero = await crearPotreroPropio(token, estancia.body.id_estancia, { nombre: 'Potrero Único' });
+    const potrero = await crearPotreroPropio(token, estancia.body.id_estancia, {
+      nombre: 'Potrero Único',
+      geom: potreroPolygon(0, estancia.boxIndex),
+    });
     id_potrero = potrero.body.id_potrero;
     ({ token: tokenOtro } = await crearUsuario());
   });
@@ -506,15 +536,16 @@ describe('GET /api/v2/potrero/:potreroId (#14)', () => {
 });
 
 describe('PATCH /api/v2/potrero/:potreroId (#15)', () => {
-  let token, tokenOtro, id_potrero1, id_potrero2;
+  let token, tokenOtro, id_potrero1, id_potrero2, boxIndex;
 
   beforeAll(async () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Potrero PATCH' });
     const id_estancia = estancia.body.id_estancia;
-    const p1 = await crearPotreroPropio(token, id_estancia, { nombre: 'P1', geom: potreroPolygon(0) });
+    boxIndex = estancia.boxIndex;
+    const p1 = await crearPotreroPropio(token, id_estancia, { nombre: 'P1', geom: potreroPolygon(0, boxIndex) });
     id_potrero1 = p1.body.id_potrero;
-    const p2 = await crearPotreroPropio(token, id_estancia, { nombre: 'P2', geom: potreroPolygon(1) });
+    const p2 = await crearPotreroPropio(token, id_estancia, { nombre: 'P2', geom: potreroPolygon(1, boxIndex) });
     id_potrero2 = p2.body.id_potrero;
     ({ token: tokenOtro } = await crearUsuario());
   });
@@ -529,15 +560,15 @@ describe('PATCH /api/v2/potrero/:potreroId (#15)', () => {
     expect(res.status).toBe(200);
     expect(res.body.nombre).toBe('P1 Renombrado');
     expect(res.body.descripcion).toBe('nueva desc');
-    expect(res.body.geom).toEqual(potreroPolygon(0));
+    expect(res.body.geom).toEqual(potreroPolygon(0, boxIndex));
   });
 
   test('actualiza el geom a una posición válida dentro de la estancia', async () => {
     const res = await authHeader(request(app).patch(`/api/v2/potrero/${id_potrero1}`), token).send({
-      geom: potreroPolygon(2),
+      geom: potreroPolygon(2, boxIndex),
     });
     expect(res.status).toBe(200);
-    expect(res.body.geom).toEqual(potreroPolygon(2));
+    expect(res.body.geom).toEqual(potreroPolygon(2, boxIndex));
   });
 
   test('rechaza un geom autointersectante', async () => {
@@ -556,7 +587,7 @@ describe('PATCH /api/v2/potrero/:potreroId (#15)', () => {
 
   test('rechaza un geom que se solapa con otro potrero', async () => {
     const res = await authHeader(request(app).patch(`/api/v2/potrero/${id_potrero1}`), token).send({
-      geom: potreroPolygon(1), // geom actual de id_potrero2
+      geom: potreroPolygon(1, boxIndex), // geom actual de id_potrero2
     });
     expect(res.status).toBe(400);
   });
@@ -580,17 +611,18 @@ describe('PATCH /api/v2/potrero/:potreroId (#15)', () => {
 });
 
 describe('DELETE /api/v2/potrero/:potreroId (#16)', () => {
-  let token, tokenOtro, id_estancia;
+  let token, tokenOtro, id_estancia, boxIndex;
 
   beforeAll(async () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Potrero DELETE' });
     id_estancia = estancia.body.id_estancia;
+    boxIndex = estancia.boxIndex;
     ({ token: tokenOtro } = await crearUsuario());
   });
 
   test('sin animales asignados, elimina (baja lógica) directamente sin pedir confirmación', async () => {
-    const potrero = await crearPotreroPropio(token, id_estancia, { nombre: 'Vacío', geom: potreroPolygon(0) });
+    const potrero = await crearPotreroPropio(token, id_estancia, { nombre: 'Vacío', geom: potreroPolygon(0, boxIndex) });
     const id_potrero = potrero.body.id_potrero;
 
     const res = await authHeader(request(app).delete(`/api/v2/potrero/${id_potrero}`), token);
@@ -608,13 +640,13 @@ describe('DELETE /api/v2/potrero/:potreroId (#16)', () => {
   });
 
   test('devuelve 404 para un potrero ajeno', async () => {
-    const potrero = await crearPotreroPropio(token, id_estancia, { nombre: 'Ajeno', geom: potreroPolygon(1) });
+    const potrero = await crearPotreroPropio(token, id_estancia, { nombre: 'Ajeno', geom: potreroPolygon(1, boxIndex) });
     const res = await authHeader(request(app).delete(`/api/v2/potrero/${potrero.body.id_potrero}`), tokenOtro);
     expect(res.status).toBe(404);
   });
 
   test('sin token de sesión devuelve 401', async () => {
-    const potrero = await crearPotreroPropio(token, id_estancia, { nombre: 'Sin Token', geom: potreroPolygon(2) });
+    const potrero = await crearPotreroPropio(token, id_estancia, { nombre: 'Sin Token', geom: potreroPolygon(2, boxIndex) });
     const res = await request(app).delete(`/api/v2/potrero/${potrero.body.id_potrero}`);
     expect(res.status).toBe(401);
   });
@@ -680,7 +712,7 @@ describe('POST /api/v2/potrero/:potreroId/ganado (#18)', () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Ganado en Potrero' });
     id_estancia = estancia.body.id_estancia;
-    const potrero = await crearPotreroPropio(token, id_estancia);
+    const potrero = await crearPotreroPropio(token, id_estancia, { geom: potreroPolygon(0, estancia.boxIndex) });
     id_potrero = potrero.body.id_potrero;
     ({ token: tokenOtro } = await crearUsuario());
   });
@@ -750,7 +782,7 @@ describe('GET /api/v2/estancia/:estanciaId/ganado (#19)', () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Ganado GET' });
     id_estancia = estancia.body.id_estancia;
-    const potrero = await crearPotreroPropio(token, id_estancia);
+    const potrero = await crearPotreroPropio(token, id_estancia, { geom: potreroPolygon(0, estancia.boxIndex) });
     id_potrero = potrero.body.id_potrero;
     ({ token: tokenOtro } = await crearUsuario());
   });
@@ -887,7 +919,7 @@ describe('DELETE /api/v2/ganado/:ganadoId (#21)', () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Ganado DELETE' });
     id_estancia = estancia.body.id_estancia;
-    const potrero = await crearPotreroPropio(token, id_estancia);
+    const potrero = await crearPotreroPropio(token, id_estancia, { geom: potreroPolygon(0, estancia.boxIndex) });
     id_potrero = potrero.body.id_potrero;
     ({ token: tokenOtro } = await crearUsuario());
   });
@@ -944,7 +976,7 @@ describe('GET /api/v2/potrero/:potreroId/ganado (#22)', () => {
   beforeAll(async () => {
     ({ token } = await crearUsuario());
     const estancia = await crearEstanciaPropia(token, { nombre: 'Estancia Potrero Ganado GET' });
-    const potrero = await crearPotreroPropio(token, estancia.body.id_estancia);
+    const potrero = await crearPotreroPropio(token, estancia.body.id_estancia, { geom: potreroPolygon(0, estancia.boxIndex) });
     id_potrero = potrero.body.id_potrero;
     ({ token: tokenOtro } = await crearUsuario());
   });

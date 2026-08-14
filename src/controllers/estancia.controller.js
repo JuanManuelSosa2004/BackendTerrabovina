@@ -38,6 +38,17 @@ async function create(req, res) {
     return res.status(409).json({ error: 'El usuario ya tiene una estancia asociada.' });
   }
 
+  // Dos estancias (de cualquier usuario) no pueden ocupar el mismo
+  // territorio: mismo criterio ST_Intersects que hasPotreroOverlap en
+  // potrero.controller.js, pero acá comparando contra todas las estancias
+  // activas, no sólo las del mismo dueño.
+  const overlaps = await hasEstanciaOverlap(normalizedGeom);
+  if (overlaps) {
+    return res.status(400).json({
+      error: 'El polígono de la estancia se solapa con el de otra estancia existente.',
+    });
+  }
+
   // RNF007: la estancia se asocia siempre al usuario autenticado, nunca
   // a un id_usuario recibido del cliente.
   const estancia = await estanciaRepository.createEstancia({
@@ -84,6 +95,13 @@ async function update(req, res) {
       return res.status(400).json({
         error: 'El nuevo polígono de la estancia debe contener a todos sus potreros existentes.',
         potrerosAfectados: potrerosFuera,
+      });
+    }
+
+    const overlaps = await hasEstanciaOverlap(normalizedGeom, req.estancia.id_estancia);
+    if (overlaps) {
+      return res.status(400).json({
+        error: 'El polígono de la estancia se solapa con el de otra estancia existente.',
       });
     }
   }
@@ -138,6 +156,26 @@ async function remove(req, res) {
   });
 
   return res.json({ deleted: true, potrerosEliminados: potrerosActivos.length, ganadoEliminado: ganado.length });
+}
+
+// Estancias activas (de cualquier usuario) cuyo geom se solapa con el
+// polígono dado; excludeEstanciaId se usa en update() para no comparar la
+// estancia contra sí misma.
+async function hasEstanciaOverlap(polygon, excludeEstanciaId = null) {
+  const excludeClause = excludeEstanciaId ? 'AND id_estancia != :excludeId' : '';
+  const [row] = await sequelize.query(
+    `SELECT COUNT(*) AS total
+     FROM \`estancia\`
+     WHERE activo = TRUE
+       AND geom IS NOT NULL
+       ${excludeClause}
+       AND ST_Intersects(geom, ST_GeomFromGeoJSON(:geojson, 1, 4326))`,
+    {
+      replacements: { geojson: JSON.stringify(polygon), excludeId: excludeEstanciaId },
+      type: QueryTypes.SELECT,
+    }
+  );
+  return Number(row.total) > 0;
 }
 
 // Potreros cuya geometría quedaría fuera del nuevo polígono de la estancia

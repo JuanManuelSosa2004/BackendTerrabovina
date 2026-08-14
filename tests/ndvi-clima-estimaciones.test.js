@@ -21,18 +21,25 @@ function polygon(coords) {
   return { type: 'Polygon', coordinates: [coords] };
 }
 
-function bigPolygon() {
+// boxIndex desplaza el rectángulo 12° en longitud para que cada estancia
+// creada en este archivo (una por describe, vía crearEstanciaConPotrero)
+// ocupe territorio propio: sin esto, la validación de solape entre
+// estancias (estancia.controller.js#hasEstanciaOverlap) rechaza la
+// segunda y tercera estancia del archivo por pisar la primera.
+function bigPolygon(boxIndex = 0) {
+  const lonBase = -70 + boxIndex * 12;
   return polygon([
-    [-70, -40],
-    [-60, -40],
-    [-60, -30],
-    [-70, -30],
-    [-70, -40],
+    [lonBase, -40],
+    [lonBase + 10, -40],
+    [lonBase + 10, -30],
+    [lonBase, -30],
+    [lonBase, -40],
   ]);
 }
 
-function potreroPolygon(index) {
-  const lon0 = -69 + index * 0.5;
+function potreroPolygon(index, boxIndex = 0) {
+  const lonBase = -70 + boxIndex * 12;
+  const lon0 = lonBase + 1 + index * 0.5;
   const lat0 = -39;
   return polygon([
     [lon0, lat0],
@@ -93,18 +100,21 @@ async function crearUsuario() {
   return { token: login.body.token, id_usuario: login.body.usuario.id_usuario };
 }
 
+let nextBoxIndex = 0;
+
 async function crearEstanciaConPotrero() {
+  const boxIndex = nextBoxIndex++;
   const { token } = await crearUsuario();
   const estancia = await authHeader(request(app).post('/api/v2/estancia'), token).send({
     nombre: 'Estancia Modelo',
-    geom: bigPolygon(),
+    geom: bigPolygon(boxIndex),
   });
   const potrero = await authHeader(request(app).post(`/api/v2/estancia/${estancia.body.id_estancia}/potrero`), token).send({
     nombre: 'Potrero Modelo',
     superficie_ha: 50,
-    geom: potreroPolygon(0),
+    geom: potreroPolygon(0, boxIndex),
   });
-  return { token, id_estancia: estancia.body.id_estancia, id_potrero: potrero.body.id_potrero };
+  return { token, id_estancia: estancia.body.id_estancia, id_potrero: potrero.body.id_potrero, boxIndex };
 }
 
 function crearGanadoEnPotrero(token, id_potrero, overrides = {}) {
@@ -187,10 +197,10 @@ describe('GET /api/v2/potrero/:id/ndvi y /dato-clima antes de cualquier estimaci
 });
 
 describe('POST /api/v2/potrero/:id/estimacion-forrajera', () => {
-  let token, tokenOtro, id_potrero;
+  let token, tokenOtro, id_potrero, boxIndex;
 
   beforeAll(async () => {
-    ({ token, id_potrero } = await crearEstanciaConPotrero());
+    ({ token, id_potrero, boxIndex } = await crearEstanciaConPotrero());
     ({ token: tokenOtro } = await crearUsuario());
   });
 
@@ -210,7 +220,7 @@ describe('POST /api/v2/potrero/:id/estimacion-forrajera', () => {
     const res = await authHeader(request(app).post(`/api/v2/potrero/${id_potrero}/estimacion-forrajera`), token);
 
     expect(res.status).toBe(201);
-    expect(predictDmp).toHaveBeenCalledWith({ nombre_potrero: 'Potrero Modelo', geojson: potreroPolygon(0) });
+    expect(predictDmp).toHaveBeenCalledWith({ nombre_potrero: 'Potrero Modelo', geojson: potreroPolygon(0, boxIndex) });
 
     expect(Number(res.body.kg_materia_seca_ha)).toBe(45.6);
     expect(Number(res.body.indice_ndvi)).toBe(0.55);

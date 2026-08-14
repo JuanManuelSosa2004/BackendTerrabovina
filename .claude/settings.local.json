@@ -70,7 +70,11 @@
       "Bash(git log *)",
       "Bash(git --no-pager diff -- src/controllers/ganado.controller.js src/database/sql/asignacionGanado.repository.js src/routes/potrero.routes.js docs/openapi.yaml tests/ganado-asignacion.test.js)",
       "Bash(echo \"JEST_EXIT_CODE=$?\")",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(tee /tmp/test-full-run.log)",
+      "Read(//tmp/**)",
+      "Bash(break)",
+      "Bash(tee /tmp/test-full-run-2.log)"
     ]
   }
 }

@@ -11,13 +11,18 @@ function polygon(coords) {
   return { type: 'Polygon', coordinates: [coords] };
 }
 
-function bigPolygon() {
+// index desplaza el rectángulo 12° en longitud para que cada estancia
+// creada en este archivo ocupe territorio propio: sin esto, la validación
+// de solape entre estancias (estancia.controller.js#hasEstanciaOverlap)
+// rechaza la segunda y tercera estancia del archivo por pisar la primera.
+function bigPolygon(index = 0) {
+  const lonBase = -70 + index * 12;
   return polygon([
-    [-70, -40],
-    [-60, -40],
-    [-60, -30],
-    [-70, -30],
-    [-70, -40],
+    [lonBase, -40],
+    [lonBase + 10, -40],
+    [lonBase + 10, -30],
+    [lonBase, -30],
+    [lonBase, -40],
   ]);
 }
 
@@ -37,11 +42,14 @@ async function crearUsuario() {
   return { token: login.body.token, id_usuario: login.body.usuario.id_usuario };
 }
 
+let nextBoxIndex = 0;
+
 async function crearEstanciaPropia(token, overrides = {}) {
+  const geom = overrides.geom ?? bigPolygon(nextBoxIndex++);
   return authHeader(request(app).post('/api/v2/estancia'), token).send({
     nombre: 'Estancia Empleado',
-    geom: bigPolygon(),
     ...overrides,
+    geom,
   });
 }
 

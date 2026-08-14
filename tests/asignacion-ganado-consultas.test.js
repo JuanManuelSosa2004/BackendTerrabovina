@@ -11,18 +11,25 @@ function polygon(coords) {
   return { type: 'Polygon', coordinates: [coords] };
 }
 
-function bigPolygon() {
+// boxIndex desplaza el rectángulo 12° en longitud para que cada estancia
+// creada en este archivo (una por llamada a crearEstanciaConPotreros)
+// ocupe territorio propio: sin esto, la validación de solape entre
+// estancias (estancia.controller.js#hasEstanciaOverlap) rechaza la
+// segunda estancia en adelante por pisar la primera.
+function bigPolygon(boxIndex = 0) {
+  const lonBase = -70 + boxIndex * 12;
   return polygon([
-    [-70, -40],
-    [-60, -40],
-    [-60, -30],
-    [-70, -30],
-    [-70, -40],
+    [lonBase, -40],
+    [lonBase + 10, -40],
+    [lonBase + 10, -30],
+    [lonBase, -30],
+    [lonBase, -40],
   ]);
 }
 
-function potreroPolygon(index) {
-  const lon0 = -69 + index * 0.5;
+function potreroPolygon(index, boxIndex = 0) {
+  const lonBase = -70 + boxIndex * 12;
+  const lon0 = lonBase + 1 + index * 0.5;
   const lat0 = -39;
   return polygon([
     [lon0, lat0],
@@ -36,9 +43,11 @@ function potreroPolygon(index) {
 const usuariosCreados = [];
 let contadorGanado = 0;
 let contadorUsuarios = 0;
+let nextBoxIndex = 0;
 
 async function crearEstanciaConPotreros(cantidadPotreros) {
   contadorUsuarios += 1;
+  const boxIndex = nextBoxIndex++;
   const email = `asig-consulta-${Date.now()}-${contadorUsuarios}@example.com`;
 
   await request(app).post('/api/v2/auth/registro').send({ nombre: 'Asig Consulta Test', email, password: 'password123' });
@@ -50,7 +59,7 @@ async function crearEstanciaConPotreros(cantidadPotreros) {
   const estancia = await request(app)
     .post('/api/v2/estancia')
     .set('Authorization', `Bearer ${token}`)
-    .send({ nombre: `Estancia ${email}`, geom: bigPolygon() });
+    .send({ nombre: `Estancia ${email}`, geom: bigPolygon(boxIndex) });
   const id_estancia = estancia.body.id_estancia;
 
   const potreroIds = [];
@@ -58,7 +67,7 @@ async function crearEstanciaConPotreros(cantidadPotreros) {
     const potrero = await request(app)
       .post(`/api/v2/estancia/${id_estancia}/potrero`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ nombre: `Potrero ${i}`, geom: potreroPolygon(i) });
+      .send({ nombre: `Potrero ${i}`, geom: potreroPolygon(i, boxIndex) });
     potreroIds.push(potrero.body.id_potrero);
   }
 

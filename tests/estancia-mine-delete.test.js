@@ -206,11 +206,16 @@ describe('DELETE /api/v2/estancia/:id', () => {
     const { token, id_usuario } = await crearUsuarioConToken('test-estancia-del-confirm@example.com');
     usuariosCreados.push(id_usuario);
 
+    // Achicado 0.05° en el borde derecho/superior respecto del rectángulo
+    // "natural" (-61.9/-36.4) para no sólo tocar en una esquina al de
+    // 'Estancia Con Potreros' (test anterior, que queda activa a
+    // propósito): un contacto en un punto ya cuenta como solape para
+    // hasEstanciaOverlap (ST_Intersects).
     const geomEstancia = polygon([
       [-62.2, -36.7],
-      [-61.9, -36.7],
-      [-61.9, -36.4],
-      [-62.2, -36.4],
+      [-61.95, -36.7],
+      [-61.95, -36.45],
+      [-62.2, -36.45],
       [-62.2, -36.7],
     ]);
     const estancia = await auth(request(app).post('/api/v2/estancia'), token).send({
