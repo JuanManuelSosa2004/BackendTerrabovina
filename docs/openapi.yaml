@@ -1902,6 +1902,7 @@ components:
         fecha: { type: string, format: date }
         ndvi: { type: string, nullable: true, description: "DECIMAL(6,4) serializado como string" }
         nubosidad: { type: string, nullable: true, description: "DECIMAL(5,2) serializado como string" }
+        cobertura_suelo_mapbiomas: { type: string, nullable: true, example: Pasturas }
         created_at: { type: string, format: date-time }
 
     DatoClimatico:
@@ -1921,6 +1922,12 @@ components:
       properties:
         id_disponibilidad: { type: integer }
         id_potrero: { type: integer }
+        id_observacion: { type: integer, nullable: true }
+        fecha_observacion:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha de captura de la escena satelital (observacion_satelital.fecha), no de cálculo.
         fecha_calculo: { type: string, format: date-time }
         kg_materia_seca_ha: { type: string, description: "DECIMAL(8,2) serializado como string" }
         superficie_analizada_ha: { type: string, nullable: true }

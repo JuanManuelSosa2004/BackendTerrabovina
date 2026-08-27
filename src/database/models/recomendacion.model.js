@@ -26,7 +26,14 @@ const Recomendacion = sequelize.define(
       allowNull: false,
     },
     tipo: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.ENUM(
+        'MOVER_GANADO',
+        'REDUCIR_CARGA',
+        'AUMENTAR_CARGA',
+        'SUPLEMENTAR',
+        'MANTENER',
+        'NUEVA_MEDICION'
+      ),
       allowNull: false,
     },
     descripcion: {
@@ -34,15 +41,18 @@ const Recomendacion = sequelize.define(
       allowNull: true,
     },
     prioridad: {
-      type: DataTypes.ENUM('1', '2', '3'),
+      type: DataTypes.ENUM('BAJA', 'MEDIA', 'ALTA'),
       allowNull: true,
     },
     fundamento: {
       type: DataTypes.STRING(500),
       allowNull: true,
     },
+    // Cuatro estados, no tres: ACEPTADA (el productor la aprueba) y APLICADA
+    // (efectivamente se ejecutó) son momentos distintos, y separarlos permite
+    // vincular una recomendación con el TrasladoGanado que la materializó.
     estado: {
-      type: DataTypes.ENUM('PENDIENTE', 'REALIZADA', 'RECHAZADA'),
+      type: DataTypes.ENUM('PENDIENTE', 'ACEPTADA', 'RECHAZADA', 'APLICADA'),
       allowNull: false,
       defaultValue: 'PENDIENTE',
     },

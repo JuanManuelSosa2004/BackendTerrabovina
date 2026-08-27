@@ -13,6 +13,15 @@ const DisponibilidadForrajera = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    // Observación satelital que originó este cálculo (misma transacción de
+    // estimacionForrajera.service.js#generarEstimacionForrajera). Nullable
+    // por las filas ya persistidas antes de esta columna (migración
+    // 20260824000002); da la fecha de CAPTURA real, distinta de
+    // fecha_calculo, que balanceForrajero.service.js necesita para integrar.
+    id_observacion: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     fecha_calculo: {
       type: DataTypes.DATE,
       allowNull: false,

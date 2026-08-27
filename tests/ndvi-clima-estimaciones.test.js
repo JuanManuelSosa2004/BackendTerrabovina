@@ -231,6 +231,13 @@ describe('POST /api/v2/potrero/:id/estimacion-forrajera', () => {
     expect(Number(res.body.observacion.ndvi)).toBe(0.55);
     expect(res.body.clima).toMatchObject({ temperatura: '20.80', precipitacion: '4.20', humedad: '85.00' });
 
+    // id_observacion vincula disponibilidad_forrajera con la observación de
+    // la misma corrida, y fecha_observacion (fecha de CAPTURA) es la que
+    // integrarTasa necesita — no fecha_calculo, que es cuándo se corrió el
+    // modelo.
+    expect(res.body.id_observacion).toBe(res.body.observacion.id_observacion);
+    expect(res.body.fecha_observacion).toBe(res.body.observacion.fecha);
+
     const ndvi = await authHeader(request(app).get(`/api/v2/potrero/${id_potrero}/ndvi`), token);
     expect(ndvi.status).toBe(200);
     expect(Number(ndvi.body.ndvi)).toBe(0.55);

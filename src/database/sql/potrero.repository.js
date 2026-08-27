@@ -53,6 +53,24 @@ async function getPotrerosByEstancia(id_estancia) {
   return rows.map((row) => ({ ...row, geom: parseGeoJsonColumn(row.geom) }));
 }
 
+// Todos los potreros activos del sistema, sin filtrar por estancia: lo usa
+// el ciclo automático de estimación forrajera (jobs/estimacionForrajeraCron.job.js),
+// que recorre potreros de cualquier usuario, no la petición de un usuario
+// puntual. `geom IS NOT NULL` es defensivo: el alta de potrero ya exige
+// geometría (potrero.controller.js#create), pero sin ella predictDmp no
+// tiene qué mandarle al modelo.
+async function getPotrerosActivos() {
+  const rows = await sequelize.query(
+    `SELECT id_potrero, id_estancia, nombre, descripcion, superficie_ha, activo,
+            ST_AsGeoJSON(geom) AS geom, created_at, updated_at
+     FROM \`potrero\`
+     WHERE activo = TRUE AND geom IS NOT NULL
+     ORDER BY id_potrero`,
+    { type: QueryTypes.SELECT }
+  );
+  return rows.map((row) => ({ ...row, geom: parseGeoJsonColumn(row.geom) }));
+}
+
 const UPDATABLE_FIELDS = ['nombre', 'descripcion', 'superficie_ha', 'activo'];
 
 async function updatePotrero(id, fields, transaction) {
@@ -84,6 +102,7 @@ module.exports = {
   createPotrero,
   getPotreroById,
   getPotrerosByEstancia,
+  getPotrerosActivos,
   updatePotrero,
   darDeBajaTodosDeEstancia,
 };

@@ -74,7 +74,11 @@
       "Bash(tee /tmp/test-full-run.log)",
       "Read(//tmp/**)",
       "Bash(break)",
-      "Bash(tee /tmp/test-full-run-2.log)"
+      "Bash(tee /tmp/test-full-run-2.log)",
+      "Artifact",
+      "Bash(npx --version)",
+      "Bash(npm ping *)",
+      "Bash(npx -y @mermaid-js/mermaid-cli --version)"
     ]
   }
 }

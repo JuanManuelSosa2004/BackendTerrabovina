@@ -1,0 +1,33 @@
+{
+  "_fuentes": "Ver docs/parametros-ventana-y-utilizacion-fuentes.md. U: Berretta y Bemhaja (1998) y Montossi et al. (2000) citados por Reinoso y Soto (2012a); INTA Rafaela para pastura implantada. Ventanas: Hill Secco y Zanoniani citados por Reinoso y Soto (2012b). Remanente: Risso y Zarza citados por Reinoso y Soto (2012a).",
+
+  "perfiles": {
+    "PASTIZAL_NATURAL": {
+      "factorUtilizacion": 0.50,
+      "remanenteKgMsHa": 1000,
+      "ventanaDias": { "primavera": 38, "verano": 48, "otonio": 60, "invierno": 90 }
+    },
+    "PASTURA_IMPLANTADA": {
+      "factorUtilizacion": 0.55,
+      "remanenteKgMsHa": 1000,
+      "ventanaDias": { "primavera": 35, "verano": 45, "otonio": 60, "invierno": 90 }
+    }
+  },
+
+  "perfilPorDefecto": "PASTIZAL_NATURAL",
+  "ventanaMaximaDias": 120,
+
+  "umbrales": {
+    "bandaNeutraInferior": 0.90,
+    "bandaNeutraSuperior": 1.10,
+    "deficitAgudo": 0.75,
+    "excedenteSostenido": 1.35,
+    "autonomiaCritica": 7,
+    "autonomiaBaja": 15,
+    "autonomiaMaximaInformadaDias": 60,
+    "confianzaMinima": 0.60,
+    "antiguedadMaximaDias": 15,
+    "coberturaMinima": 0.70,
+    "persistenciaMinima": 2
+  }
+}
