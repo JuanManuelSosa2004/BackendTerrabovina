@@ -426,6 +426,130 @@ function proyectarConsumoRetroactivo({
 }
 
 /**
+ * Reconstruye la serie de consumo del potrero a partir del historial de
+ * asignaciones, para alimentar integrarEscalon.
+ *
+ * Cada asignación aporta dos eventos: un animal entra en `fecha_desde` y sale
+ * en `fecha_hasta`. Barriendo esos eventos en orden se obtiene la cantidad de
+ * animales presentes en cada tramo, que es exacta: el historial registra los
+ * instantes de cambio, no una estimación de ellos.
+ *
+ * Lo que sí se aproxima es el consumo por animal. El modelo de demanda no
+ * puede consultarse retroactivamente —los pesos de hace tres meses no están
+ * registrados— de modo que se aplica el consumo medio actual a toda la
+ * ventana:
+ *
+ *     D(t) ≈ n(t) · d̄_actual
+ *
+ * La aproximación reparte bien el error: la magnitud que cambia de golpe (la
+ * cantidad) queda exacta, y la que se aproxima (la composición del lote) varía
+ * de forma lenta. Un potrero cuya categoría dominante cambió dentro de la
+ * ventana quedará sesgado, pero es el caso menos frecuente.
+ *
+ * Los eventos se recortan a la ventana: una asignación anterior a `desde` se
+ * cuenta desde el borde, y una que no cierra dentro del período no aporta
+ * evento de salida.
+ */
+function construirConsumoDesdeAsignaciones({ asignaciones, desde, hasta, consumoMedioAnimalKgDia }) {
+  const t0 = aMs(desde);
+  const t1 = aMs(hasta);
+  const dMedio = num(consumoMedioAnimalKgDia);
+
+  if (t0 === null || t1 === null || t1 <= t0 || !Array.isArray(asignaciones)) return [];
+  if (dMedio === null || dMedio <= 0) return [];
+
+  const eventos = [];
+  for (const a of asignaciones) {
+    const inicio = aMs(a.fecha_desde);
+    if (inicio === null || inicio > t1) continue;
+    eventos.push({ t: Math.max(inicio, t0), delta: 1 });
+
+    // fecha_hasta NULL significa vigente: el animal no sale dentro de la
+    // ventana y por lo tanto no genera evento de salida.
+    const fin = a.fecha_hasta ? aMs(a.fecha_hasta) : null;
+    if (fin !== null && fin <= t1) eventos.push({ t: Math.max(fin, t0), delta: -1 });
+  }
+
+  if (eventos.length === 0) return [];
+
+  // Las salidas se procesan antes que las entradas del mismo instante: un
+  // traslado cierra la asignación vigente y abre la nueva con la misma fecha,
+  // y contarlas al revés inflaría el recuento por un instante.
+  eventos.sort((a, b) => a.t - b.t || a.delta - b.delta);
+
+  const muestras = [];
+  let animales = 0;
+  let i = 0;
+  while (i < eventos.length) {
+    const t = eventos[i].t;
+    while (i < eventos.length && eventos[i].t === t) {
+      animales += eventos[i].delta;
+      i += 1;
+    }
+    const valor = Math.max(0, animales) * dMedio;
+    const ultima = muestras[muestras.length - 1];
+    // Sin cambio efectivo no se emite muestra: integrarEscalon sostiene el
+    // valor anterior hasta el próximo cambio.
+    if (!ultima || ultima.valor !== valor) muestras.push({ fecha: new Date(t), valor, animales });
+  }
+
+  return muestras;
+}
+
+/**
+ * Magnitudes accionables: responden *cuánto* en lugar de solo la dirección.
+ *
+ *   n*  = g · A / d̄     carga sostenible en equilibrio      [animales]
+ *   Δn  = n − n*         exceso (positivo) o margen (negativo)
+ *   A*  = D / g          superficie que la carga actual requiere   [ha]
+ *
+ * De la definición del índice se desprende una identidad que simplifica el
+ * segundo: como n/n* = c/g = 1/IB, resulta n* = n · IB y por lo tanto
+ * Δn = n · (1 − IB). El exceso de carga es la cantidad de animales
+ * multiplicada por la distancia del índice a la unidad.
+ *
+ * La carga sostenible se trunca hacia abajo: informar que el potrero sostiene
+ * 45 animales cuando el cálculo arroja 45,5 es el lado conservador.
+ *
+ * Devuelve null en los campos que dependen del lote cuando el potrero está
+ * vacío: sin animales el consumo medio no está definido. La superficie
+ * requerida tampoco, porque sin demanda no hay superficie que requerir.
+ */
+function calcularCarga({ ofertaHaDia, demandaTotalKgDia, cantidadAnimales, superficieHa }) {
+  const g = num(ofertaHaDia);
+  const D = num(demandaTotalKgDia);
+  const n = num(cantidadAnimales);
+  const A = num(superficieHa);
+
+  if (g === null || D === null || A === null || A <= 0) return null;
+
+  const potreroVacio = n === null || n <= 0 || D <= 0;
+  const superficieRequeridaHa = g > 0 && D > 0 ? D / g : null;
+
+  if (potreroVacio) {
+    return {
+      consumoMedioAnimalKgDia: null,
+      cargaSostenible: null,
+      excesoAnimales: null,
+      superficieRequeridaHa,
+      deficitSuperficieHa: superficieRequeridaHa === null ? null : superficieRequeridaHa - A,
+    };
+  }
+
+  const consumoMedioAnimalKgDia = D / n;
+  const cargaSostenibleCruda = (g * A) / consumoMedioAnimalKgDia;
+
+  return {
+    consumoMedioAnimalKgDia,
+    cargaSostenible: Math.floor(cargaSostenibleCruda),
+    cargaSostenibleCruda,
+    excesoAnimales: n - cargaSostenibleCruda,
+    superficieRequeridaHa,
+    deficitSuperficieHa: superficieRequeridaHa === null ? null : superficieRequeridaHa - A,
+  };
+}
+
+/**
  * Cobertura efectiva de la estimación: qué fracción del potrero pudo analizar
  * el modelo. No es un factor de conversión —para llevar la demanda a hectárea
  * va la superficie del potrero, porque los animales pastorean el potrero
@@ -444,7 +568,9 @@ module.exports = {
   integrarTasa,
   integrarEscalon,
   proyectarConsumoRetroactivo,
+  construirConsumoDesdeAsignaciones,
   calcularAutonomia,
+  calcularCarga,
   coberturaEstimacion,
   ventanaDiasPara,
   estacionDe,

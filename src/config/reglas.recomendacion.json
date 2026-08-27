@@ -1,0 +1,238 @@
+[
+  {
+    "name": "R-VACIO",
+    "priority": 110,
+    "_nota": "Un potrero sin hacienda no admite recomendación de manejo. Va antes que la compuerta porque no es un problema de datos.",
+    "conditions": {
+      "all": [{ "fact": "potreroVacio", "operator": "equal", "value": true }]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 1,
+        "tipo": "MANTENER",
+        "prioridad": "BAJA",
+        "descripcion": "Potrero sin hacienda asignada.",
+        "plantilla": "El potrero no tiene animales asignados. La disponibilidad estimada es de {ofertaHaDia} kg MS/ha/día."
+      }
+    }
+  },
+
+  {
+    "name": "R-GATE-DATO-INSUFICIENTE",
+    "priority": 100,
+    "_nota": "Compuerta de confianza. Si el dato no alcanza, el sistema declara insuficiencia antes que sugerir mover hacienda con información desactualizada.",
+    "conditions": {
+      "any": [
+        { "fact": "diasDesdeObservacion", "operator": "greaterThan", "value": 15 },
+        { "fact": "confianzaInsuficiente", "operator": "equal", "value": true },
+        { "fact": "pesosFueraDeRango", "operator": "equal", "value": true },
+        { "fact": "tieneIndice", "operator": "equal", "value": false }
+      ]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 2,
+        "tipo": "NUEVA_MEDICION",
+        "prioridad": "MEDIA",
+        "descripcion": "Datos insuficientes para una recomendación de manejo.",
+        "plantilla": "La última observación utilizable del potrero tiene {diasDesdeObservacion} días. No se emite recomendación de manejo hasta contar con información más reciente."
+      }
+    }
+  },
+
+  {
+    "name": "R-PISO-CRITICO",
+    "priority": 90,
+    "_nota": "En el piso y consumiendo más de lo que crece: no hay reserva ni recuperación.",
+    "conditions": {
+      "all": [
+        { "fact": "enPiso", "operator": "equal", "value": true },
+        { "fact": "tieneIndice", "operator": "equal", "value": true },
+        { "fact": "indiceBalance", "operator": "lessThan", "value": 0.9 }
+      ]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 3,
+        "tipo": "MOVER_GANADO",
+        "prioridad": "ALTA",
+        "descripcion": "Potrero en su nivel mínimo de forraje con carga excedida.",
+        "plantilla": "El potrero se encuentra en su nivel mínimo de forraje y la producción cubre el {pctCobertura} % del consumo de los {cantidadAnimales} animales asignados. Corresponde retirar los animales."
+      }
+    }
+  },
+
+  {
+    "name": "R-PISO-RECUPERANDO",
+    "priority": 85,
+    "_nota": "En el piso pero la producción actual supera el consumo: la reserva se está recomponiendo. Mover no es urgente; aumentar carga sí sería un error.",
+    "conditions": {
+      "all": [
+        { "fact": "enPiso", "operator": "equal", "value": true },
+        { "fact": "tieneIndice", "operator": "equal", "value": true },
+        { "fact": "indiceBalance", "operator": "greaterThan", "value": 1.1 }
+      ]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 4,
+        "tipo": "MANTENER",
+        "prioridad": "MEDIA",
+        "descripcion": "Potrero en recuperación.",
+        "plantilla": "El potrero se encuentra en su nivel mínimo de forraje, pero la producción actual supera el consumo. No corresponde incrementar la carga hasta que se recomponga la reserva."
+      }
+    }
+  },
+
+  {
+    "name": "R-PISO-BORDE-SOSTIENE",
+    "priority": 83,
+    "_nota": "Histéresis. En la banda neutra el índice oscila por ruido; sin esto la recomendación saltaría entre crítico y recuperación en evaluaciones consecutivas. Sostiene el estado anterior si era de recuperación.",
+    "conditions": {
+      "all": [
+        { "fact": "enPiso", "operator": "equal", "value": true },
+        { "fact": "tipoAnterior", "operator": "equal", "value": "MANTENER" }
+      ]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 5,
+        "tipo": "MANTENER",
+        "prioridad": "MEDIA",
+        "descripcion": "Potrero en recuperación.",
+        "plantilla": "El potrero se encuentra en su nivel mínimo de forraje y el balance está próximo al equilibrio. Se sostiene la evaluación anterior: no corresponde incrementar la carga."
+      }
+    }
+  },
+
+  {
+    "name": "R-PISO-BORDE",
+    "priority": 80,
+    "_nota": "En el piso, en banda neutra y sin antecedente que sostener: se resuelve por el lado seguro.",
+    "conditions": {
+      "all": [{ "fact": "enPiso", "operator": "equal", "value": true }]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 6,
+        "tipo": "MOVER_GANADO",
+        "prioridad": "ALTA",
+        "descripcion": "Potrero en su nivel mínimo de forraje.",
+        "plantilla": "El potrero se encuentra en su nivel mínimo de forraje y el balance no muestra recuperación. Corresponde retirar los animales."
+      }
+    }
+  },
+
+  {
+    "name": "R-DEFICIT-SIN-MARGEN",
+    "priority": 70,
+    "_nota": "Déficit agudo con la reserva por agotarse: no da tiempo a organizar un traslado.",
+    "conditions": {
+      "all": [
+        { "fact": "tieneIndice", "operator": "equal", "value": true },
+        { "fact": "indiceBalance", "operator": "lessThan", "value": 0.75 },
+        { "fact": "tieneAutonomia", "operator": "equal", "value": true },
+        { "fact": "diasAutonomia", "operator": "lessThan", "value": 7 }
+      ]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 7,
+        "tipo": "SUPLEMENTAR",
+        "prioridad": "ALTA",
+        "descripcion": "Reserva por agotarse.",
+        "plantilla": "El potrero cubre el {pctCobertura} % del consumo de los {cantidadAnimales} animales asignados y la reserva alcanza {diasAutonomia} días. El plazo no admite organizar un traslado: corresponde suplementar."
+      }
+    }
+  },
+
+  {
+    "name": "R-DEFICIT-AGUDO",
+    "priority": 60,
+    "conditions": {
+      "all": [
+        { "fact": "tieneIndice", "operator": "equal", "value": true },
+        { "fact": "indiceBalance", "operator": "lessThan", "value": 0.75 }
+      ]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 8,
+        "tipo": "MOVER_GANADO",
+        "prioridad": "ALTA",
+        "descripcion": "Sobrepoblamiento.",
+        "plantilla": "El potrero cubre el {pctCobertura} % del consumo de los {cantidadAnimales} animales asignados ({demandaHaDia} kg MS/ha/día requeridos frente a {ofertaHaDia} disponibles). La carga sostenible es de {cargaSostenible} cabezas: sobran {excesoAnimales}."
+      }
+    }
+  },
+
+  {
+    "name": "R-DEFICIT-LEVE",
+    "priority": 50,
+    "conditions": {
+      "all": [
+        { "fact": "tieneIndice", "operator": "equal", "value": true },
+        { "fact": "indiceBalance", "operator": "lessThan", "value": 0.9 }
+      ]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 9,
+        "tipo": "REDUCIR_CARGA",
+        "prioridad": "MEDIA",
+        "descripcion": "Carga por encima de la producción.",
+        "plantilla": "El potrero cubre el {pctCobertura} % del consumo de los {cantidadAnimales} animales asignados. La carga sostenible es de {cargaSostenible} cabezas: sobran {excesoAnimales}."
+      }
+    }
+  },
+
+  {
+    "name": "R-SUBUTILIZADO",
+    "priority": 40,
+    "_nota": "El forraje no consumido madura y pierde aprovechamiento: subutilizar no es neutro, es una pérdida diferida.",
+    "conditions": {
+      "all": [
+        { "fact": "tieneIndice", "operator": "equal", "value": true },
+        { "fact": "indiceBalance", "operator": "greaterThan", "value": 1.35 }
+      ]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 10,
+        "tipo": "AUMENTAR_CARGA",
+        "prioridad": "MEDIA",
+        "descripcion": "Subutilización.",
+        "plantilla": "El potrero produce {ofertaHaDia} kg MS/ha/día frente a un consumo de {demandaHaDia}. Admite {margenAnimales} animales adicionales sobre los {cantidadAnimales} actuales. El forraje no consumido madura y pierde aprovechamiento."
+      }
+    }
+  },
+
+  {
+    "name": "R-FALLBACK",
+    "priority": 1,
+    "_nota": "Regla comodín: garantiza que ningún potrero quede sin respuesta.",
+    "conditions": {
+      "all": [{ "fact": "tieneIndice", "operator": "equal", "value": true }]
+    },
+    "event": {
+      "type": "recomendacion",
+      "params": {
+        "orden": 99,
+        "tipo": "MANTENER",
+        "prioridad": "BAJA",
+        "descripcion": "Carga equilibrada.",
+        "plantilla": "El potrero cubre el {pctCobertura} % del consumo de los {cantidadAnimales} animales asignados. No se requiere intervención."
+      }
+    }
+  }
+]

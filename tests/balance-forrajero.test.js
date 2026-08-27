@@ -12,6 +12,8 @@ const {
   integrarTasa,
   integrarEscalon,
   proyectarConsumoRetroactivo,
+  construirConsumoDesdeAsignaciones,
+  calcularCarga,
 } = require('../src/services/balanceForrajero.service');
 
 describe('estacionDe', () => {
@@ -533,6 +535,253 @@ describe('proyectarConsumoRetroactivo', () => {
     expect(sinProyectar.stockKgMsHa).toBeGreaterThan(proyectado.stockKgMsHa);
     // 500 kg/día sobre 50 ha durante 40 días = 400 kg MS/ha descontados
     expect(sinProyectar.stockKgMsHa - proyectado.stockKgMsHa).toBeCloseTo(400, 6);
+  });
+});
+
+describe('acumularStock — neto sin acotar y piso', () => {
+  const VENTANA = { desde: '2026-10-01', hasta: '2026-11-10' };
+  const obs = (valor) =>
+    Array.from({ length: 9 }, (_, i) => ({
+      fecha: new Date(new Date('2026-10-01').getTime() + i * 5 * 86400000).toISOString().slice(0, 10),
+      valor,
+    }));
+
+  test('conserva el neto negativo aunque el stock quede en el piso', () => {
+    const r = acumularStock({
+      observaciones: obs(2),
+      consumos: [{ fecha: '2026-10-01', valor: 3000 }],
+      superficieHa: 50,
+      ...VENTANA,
+      factorUtilizacion: 0.5,
+      remanenteKgMsHa: 1000,
+    });
+    // oferta 40 kg MS/ha, consumo 2400 kg MS/ha → neto -2360
+    expect(r.acumuladoNetoHa).toBeCloseTo(-2360, 6);
+    expect(r.acumuladoUtilHa).toBe(0);
+    expect(r.stockKgMsHa).toBe(1000);
+    expect(r.enPiso).toBe(true);
+  });
+
+  test('la magnitud del desborde distingue ruido de potrero mal modelado', () => {
+    const leve = acumularStock({
+      observaciones: obs(14.9),
+      consumos: [{ fecha: '2026-10-01', valor: 375 }],
+      superficieHa: 50,
+      ...VENTANA,
+      factorUtilizacion: 0.5,
+      remanenteKgMsHa: 1000,
+    });
+    const grave = acumularStock({
+      observaciones: obs(2),
+      consumos: [{ fecha: '2026-10-01', valor: 3000 }],
+      superficieHa: 50,
+      ...VENTANA,
+      factorUtilizacion: 0.5,
+      remanenteKgMsHa: 1000,
+    });
+    // Los dos tocan el piso y devuelven el mismo stock...
+    expect(leve.stockKgMsHa).toBe(grave.stockKgMsHa);
+    // ...pero el neto los separa por dos órdenes de magnitud.
+    expect(Math.abs(leve.acumuladoNetoHa)).toBeLessThan(50);
+    expect(Math.abs(grave.acumuladoNetoHa)).toBeGreaterThan(1000);
+  });
+
+  test('el umbral del piso es configurable', () => {
+    const base = {
+      observaciones: obs(14.9),
+      consumos: [{ fecha: '2026-10-01', valor: 375 }],
+      superficieHa: 50,
+      ...VENTANA,
+      factorUtilizacion: 0.5,
+      remanenteKgMsHa: 1000,
+    };
+    expect(acumularStock({ ...base }).enPiso).toBe(true);
+    expect(acumularStock({ ...base, umbralPisoKgMsHa: -50 }).enPiso).toBe(false);
+  });
+
+  test('un potrero con excedente no está en piso', () => {
+    const r = acumularStock({
+      observaciones: obs(30),
+      consumos: [],
+      superficieHa: 50,
+      ...VENTANA,
+      factorUtilizacion: 0.5,
+      remanenteKgMsHa: 1000,
+    });
+    expect(r.acumuladoNetoHa).toBeGreaterThan(0);
+    expect(r.enPiso).toBe(false);
+  });
+});
+
+describe('construirConsumoDesdeAsignaciones', () => {
+  const VENTANA = { desde: '2026-10-01', hasta: '2026-11-10' };
+  const D_MEDIO = 11;
+
+  const asig = (desde, hasta = null) => ({ fecha_desde: desde, fecha_hasta: hasta });
+
+  test('cuenta los animales presentes en cada tramo', () => {
+    const m = construirConsumoDesdeAsignaciones({
+      asignaciones: [asig('2026-10-01'), asig('2026-10-01'), asig('2026-10-15')],
+      ...VENTANA,
+      consumoMedioAnimalKgDia: D_MEDIO,
+    });
+    expect(m).toHaveLength(2);
+    expect(m[0].animales).toBe(2);
+    expect(m[0].valor).toBeCloseTo(22, 6);
+    expect(m[1].animales).toBe(3);
+    expect(m[1].valor).toBeCloseTo(33, 6);
+  });
+
+  test('una asignación anterior a la ventana se cuenta desde el borde', () => {
+    // Es el caso que buildFiltrosHistorial dejaba fuera: entró hace meses y
+    // sigue ahí, así que comió todos los días de la ventana.
+    const m = construirConsumoDesdeAsignaciones({
+      asignaciones: [asig('2026-05-01')],
+      ...VENTANA,
+      consumoMedioAnimalKgDia: D_MEDIO,
+    });
+    expect(m).toHaveLength(1);
+    expect(m[0].animales).toBe(1);
+    expect(new Date(m[0].fecha).toISOString().slice(0, 10)).toBe('2026-10-01');
+  });
+
+  test('un potrero vaciado a mitad de ventana baja a cero', () => {
+    const m = construirConsumoDesdeAsignaciones({
+      asignaciones: [asig('2026-10-01', '2026-10-20'), asig('2026-10-01', '2026-10-20')],
+      ...VENTANA,
+      consumoMedioAnimalKgDia: D_MEDIO,
+    });
+    expect(m[m.length - 1].animales).toBe(0);
+    expect(m[m.length - 1].valor).toBe(0);
+  });
+
+  test('un traslado no infla el recuento por un instante', () => {
+    // Cerrar la asignación vigente y abrir la nueva con la misma fecha es lo
+    // que hace ServicioTrasladoGanado. Si la entrada se procesara antes que
+    // la salida, habría un tramo espurio con un animal de más.
+    const m = construirConsumoDesdeAsignaciones({
+      asignaciones: [asig('2026-10-01', '2026-10-15'), asig('2026-10-15')],
+      ...VENTANA,
+      consumoMedioAnimalKgDia: D_MEDIO,
+    });
+    expect(m.every((x) => x.animales <= 1)).toBe(true);
+  });
+
+  test('una asignación que cerró antes de la ventana no aporta consumo', () => {
+    const m = construirConsumoDesdeAsignaciones({
+      asignaciones: [asig('2026-08-01', '2026-09-15')],
+      ...VENTANA,
+      consumoMedioAnimalKgDia: D_MEDIO,
+    });
+    expect(m.every((x) => x.animales === 0)).toBe(true);
+  });
+
+  test('no emite muestras redundantes', () => {
+    // Dos animales que entran y salen juntos generan un solo cambio de valor
+    // en cada extremo, no cuatro.
+    const m = construirConsumoDesdeAsignaciones({
+      asignaciones: [asig('2026-10-05', '2026-10-25'), asig('2026-10-05', '2026-10-25')],
+      ...VENTANA,
+      consumoMedioAnimalKgDia: D_MEDIO,
+    });
+    expect(m).toHaveLength(2);
+  });
+
+  test('la serie resultante integra correctamente', () => {
+    // 1 animal del 1 al 11 de octubre (10 días) y 3 del 11 en adelante
+    // (30 días hasta el 10 de noviembre), a 11 kg/día cada uno.
+    const m = construirConsumoDesdeAsignaciones({
+      asignaciones: [asig('2026-10-01'), asig('2026-10-11'), asig('2026-10-11')],
+      ...VENTANA,
+      consumoMedioAnimalKgDia: D_MEDIO,
+    });
+    const { integral } = integrarEscalon({ muestras: m, ...VENTANA });
+    expect(integral).toBeCloseTo(10 * 11 + 30 * 33, 6);
+  });
+
+  test('sin asignaciones o sin consumo medio devuelve serie vacía', () => {
+    expect(
+      construirConsumoDesdeAsignaciones({ asignaciones: [], ...VENTANA, consumoMedioAnimalKgDia: D_MEDIO })
+    ).toEqual([]);
+    expect(
+      construirConsumoDesdeAsignaciones({
+        asignaciones: [asig('2026-10-01')],
+        ...VENTANA,
+        consumoMedioAnimalKgDia: 0,
+      })
+    ).toEqual([]);
+  });
+});
+
+describe('calcularCarga', () => {
+  const CASO = {
+    ofertaHaDia: 10,
+    demandaTotalKgDia: 880,
+    cantidadAnimales: 80,
+    superficieHa: 50,
+  };
+
+  test('calcula consumo medio, carga sostenible y superficie requerida', () => {
+    const r = calcularCarga(CASO);
+    expect(r.consumoMedioAnimalKgDia).toBeCloseTo(11, 6);
+    expect(r.cargaSostenibleCruda).toBeCloseTo(45.4545, 3);
+    expect(r.cargaSostenible).toBe(45); // truncada hacia abajo
+    expect(r.superficieRequeridaHa).toBeCloseTo(88, 6);
+    expect(r.deficitSuperficieHa).toBeCloseTo(38, 6);
+  });
+
+  test('identidad: el exceso es n por la distancia del índice a la unidad', () => {
+    const { ofertaHaDia, demandaTotalKgDia, cantidadAnimales, superficieHa } = CASO;
+    const IB = calcularBalance({
+      kgMsHaDia: ofertaHaDia,
+      superficieHa,
+      demandaTotalKgDia,
+      factorUtilizacion: 1,
+    }).indiceBalance;
+    const r = calcularCarga(CASO);
+    expect(r.excesoAnimales).toBeCloseTo(cantidadAnimales * (1 - IB), 6);
+    expect(r.cargaSostenibleCruda).toBeCloseTo(cantidadAnimales * IB, 6);
+  });
+
+  test('en equilibrio el exceso es nulo y la superficie requerida es la del potrero', () => {
+    // Con oferta 10 y 50 ha, la demanda de equilibrio es 500 kg MS/día.
+    const r = calcularCarga({
+      ofertaHaDia: 10,
+      demandaTotalKgDia: 500,
+      cantidadAnimales: 50,
+      superficieHa: 50,
+    });
+    expect(r.excesoAnimales).toBeCloseTo(0, 9);
+    expect(r.superficieRequeridaHa).toBeCloseTo(50, 9);
+    expect(r.deficitSuperficieHa).toBeCloseTo(0, 9);
+  });
+
+  test('con excedente el exceso es negativo e indica cuántos animales más entran', () => {
+    const r = calcularCarga({
+      ofertaHaDia: 20,
+      demandaTotalKgDia: 500,
+      cantidadAnimales: 50,
+      superficieHa: 50,
+    });
+    expect(r.excesoAnimales).toBeLessThan(0);
+    expect(r.cargaSostenible).toBe(100);
+  });
+
+  test('un potrero vacío no define carga pero tampoco falla', () => {
+    const r = calcularCarga({
+      ofertaHaDia: 10,
+      demandaTotalKgDia: 0,
+      cantidadAnimales: 0,
+      superficieHa: 50,
+    });
+    expect(r.cargaSostenible).toBeNull();
+    expect(r.consumoMedioAnimalKgDia).toBeNull();
+    expect(r.excesoAnimales).toBeNull();
+  });
+
+  test('sin superficie válida no devuelve nada', () => {
+    expect(calcularCarga({ ...CASO, superficieHa: 0 })).toBeNull();
+    expect(calcularCarga({ ...CASO, superficieHa: null })).toBeNull();
   });
 });
 
