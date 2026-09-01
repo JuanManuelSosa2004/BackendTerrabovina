@@ -91,6 +91,31 @@ async function getHistorialByPotrero(id_potrero, filtros = {}) {
   );
 }
 
+/**
+ * Asignaciones que SOLAPAN la ventana, no las que empezaron dentro de ella.
+ *
+ * buildFiltrosHistorial acota `desde`/`hasta` sobre fecha_desde, que es lo
+ * correcto para listar "qué asignaciones se abrieron en este período". Para
+ * reconstruir el consumo de una ventana hace falta lo otro: un animal que
+ * entró hace seis meses y sigue en el potrero no abrió ninguna asignación
+ * dentro de la ventana, pero comió todos sus días.
+ *
+ * La condición de solapamiento es la estándar de intervalos: la asignación
+ * empezó antes de que la ventana terminara, y terminó después de que la
+ * ventana empezara. fecha_hasta NULL significa vigente, de modo que no cierra
+ * y siempre satisface el segundo término.
+ */
+async function getSolapadasEnVentana(id_potrero, { desde, hasta }) {
+  return sequelize.query(
+    `SELECT ${SELECT_FIELDS} FROM \`asignacion_ganado\`
+     WHERE id_potrero = :id_potrero
+       AND fecha_desde <= :hasta
+       AND (fecha_hasta IS NULL OR fecha_hasta >= :desde)
+     ORDER BY fecha_desde ASC, id_asignacion ASC`,
+    { replacements: { id_potrero, desde, hasta }, type: QueryTypes.SELECT }
+  );
+}
+
 // Histórico completo de un animal a través de todos los potreros por los
 // que pasó (complementa a GET /ganado/:id/recorrido, que es la vista
 // "traslado a traslado"; esta es la vista "asignación a asignación").
@@ -169,6 +194,7 @@ module.exports = {
   countGanadoHistoricoByPotrero,
   getHistorialByEstancia,
   getHistorialByPotrero,
+  getSolapadasEnVentana,
   getHistorialByGanado,
   crearAsignacion,
   cerrarAsignacion,

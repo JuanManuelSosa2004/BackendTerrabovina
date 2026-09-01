@@ -4,7 +4,7 @@ const potreroRepository = require('../database/sql/potrero.repository');
 const disponibilidadForrajeraRepository = require('../database/sql/disponibilidadForrajera.repository');
 const estimacionDemandaRepository = require('../database/sql/estimacionDemanda.repository');
 const recomendacionRepository = require('../database/sql/recomendacion.repository');
-const { generarRecomendacion } = require('../services/estimaciones.placeholder');
+const { generarRecomendacion } = require('../services/recomendacion.service');
 
 // #34: cruza la última estimación de demanda y de disponibilidad
 // vigentes del potrero (RF009, RF010). Ambas deben existir: generarlas es
@@ -25,10 +25,17 @@ async function crear(req, res) {
     });
   }
 
-  const { tipo, prioridad, descripcion, fundamento } = generarRecomendacion({
+  // La última recomendación del potrero alimenta la histéresis de la banda
+  // neutra: sin ella, un potrero con el índice oscilando alrededor de 1
+  // alternaría entre "retirar los animales" y "está en recuperación" en
+  // evaluaciones consecutivas.
+  const [anterior] = await recomendacionRepository.getRecomendacionesByPotrero(id_potrero, {});
+
+  const { tipo, prioridad, descripcion, fundamento } = await generarRecomendacion({
     disponibilidad,
     estimacion,
-    superficie_ha: potrero.superficie_ha,
+    potrero,
+    tipoAnterior: anterior ? anterior.tipo : null,
   });
 
   const recomendacion = await recomendacionRepository.crearRecomendacion({

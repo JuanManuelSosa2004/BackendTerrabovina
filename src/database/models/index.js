@@ -71,6 +71,12 @@ DatoClimatico.belongsTo(Potrero, { foreignKey: 'id_potrero', as: 'potrero' });
 Potrero.hasMany(DisponibilidadForrajera, { foreignKey: 'id_potrero', as: 'disponibilidades' });
 DisponibilidadForrajera.belongsTo(Potrero, { foreignKey: 'id_potrero', as: 'potrero' });
 
+// Migración 20260824000002: vínculo real a la observación satelital que
+// originó el cálculo (fecha de captura), agregado sobre el DER original
+// que la marcaba como derivación sin FK.
+ObservacionSatelital.hasOne(DisponibilidadForrajera, { foreignKey: 'id_observacion', as: 'disponibilidadDerivada' });
+DisponibilidadForrajera.belongsTo(ObservacionSatelital, { foreignKey: 'id_observacion', as: 'observacion' });
+
 Potrero.hasMany(EstimacionDemanda, { foreignKey: 'id_potrero', as: 'estimacionesDemanda' });
 EstimacionDemanda.belongsTo(Potrero, { foreignKey: 'id_potrero', as: 'potrero' });
 

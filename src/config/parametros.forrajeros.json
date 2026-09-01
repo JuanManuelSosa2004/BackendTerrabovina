@@ -1,0 +1,74 @@
+{
+  "_fuentes": "Ver docs/parametros-ventana-y-utilizacion-fuentes.md. U: Berretta y Bemhaja (1998) y Montossi et al. (2000) citados por Reinoso y Soto (2012a); INTA Rafaela para pastura implantada. Ventanas: Hill Secco y Zanoniani citados por Reinoso y Soto (2012b). Remanente: Risso y Zarza citados por Reinoso y Soto (2012a).",
+
+  "perfiles": {
+    "PASTIZAL_NATURAL": {
+      "factorUtilizacion": 0.50,
+      "remanenteKgMsHa": 1000,
+      "ventanaDias": { "primavera": 38, "verano": 48, "otonio": 60, "invierno": 90 }
+    },
+    "PASTURA_IMPLANTADA": {
+      "factorUtilizacion": 0.55,
+      "remanenteKgMsHa": 1000,
+      "ventanaDias": { "primavera": 35, "verano": 45, "otonio": 60, "invierno": 90 }
+    }
+  },
+
+  "perfilPorDefecto": "PASTIZAL_NATURAL",
+  "ventanaMaximaDias": 120,
+
+  "_mapeoCobertura": "El modelo devuelve la clase de MapBiomas como texto ('Pasturas', 'Pastizal', etc.), que no coincide con las claves de `perfiles`. Sin este mapeo, perfilPara no encuentra el perfil y cae al de defecto sin avisar: todo potrero terminaría usando pastizal natural sea cual sea su cobertura. La comparación ignora mayúsculas, acentos y plurales. La lista está incompleta a propósito: hay que ampliarla cuando se conozcan los valores reales que devuelve el modelo (SELECT DISTINCT clase_cobertura_mapbiomas FROM observacion_satelital).",
+
+  "mapeoCobertura": {
+    "PASTIZAL_NATURAL": [
+      "pastizal",
+      "pastizal natural",
+      "campo natural",
+      "formacion herbacea",
+      "formacion natural no forestal",
+      "vegetacion herbacea"
+    ],
+    "PASTURA_IMPLANTADA": [
+      "pastura",
+      "pastura implantada",
+      "pastura perenne",
+      "pradera",
+      "cultivo temporario",
+      "cultivo perenne",
+      "agricultura"
+    ]
+  },
+
+  "_coberturaAgricola": "MapBiomas clasifica como 'Cultivos temporarios' tanto un lote de soja como un verdeo de invierno bajo pastoreo. Se lo asocia a PASTURA_IMPLANTADA porque un potrero con hacienda asignada y esa cobertura es, casi con seguridad, un verdeo: nadie carga animales sobre un lote de cosecha. La utilización de 0,55 es razonable para un verdeo, aunque conviene revisar el criterio cuando se conozca la distribución real de clases.",
+
+  "_referenciaCrecimiento": "Crecimiento bruto normal en kg MS/ha/día por mes (1=enero). Medido con cortes de biomasa a campo, no estimado por satélite: es el nivel contra el cual se calibra la salida del modelo de DMP. Corrientes: mediana de 9 comunidades de pastizal sin fertilizar, Cuadro 3 de Pizzio (INTA EEA Mercedes). Integra 5269 kg MS/ha/año, dentro del 4 % de las dos referencias anuales independientes del Observatorio Forrajero Nacional (5086 por sitio y 5132 por departamento). Ver docs/referencia-ppna-calibracion.md.",
+
+  "referenciaCrecimiento": {
+    "CORRIENTES": {
+      "PASTIZAL_NATURAL": {
+        "1": 21.4, "2": 21.3, "3": 21.6, "4": 16.1, "5": 7.5, "6": 4.5,
+        "7": 4.3, "8": 6.5, "9": 10.7, "10": 17.1, "11": 20.2, "12": 22.5
+      }
+    },
+    "ENTRE_RIOS": {
+      "PASTIZAL_NATURAL": {
+        "_nota": "Observatorio regional del norte de Entre Ríos, promedio 2001-2024. Junio a septiembre son valores publicados; el resto queda pendiente de completar desde agroshiny.shinyapps.io/region_NER/.",
+        "6": 5.9, "7": 5.2, "8": 5.7, "9": 8.2
+      }
+    }
+  },
+
+  "umbrales": {
+    "bandaNeutraInferior": 0.90,
+    "bandaNeutraSuperior": 1.10,
+    "deficitAgudo": 0.75,
+    "excedenteSostenido": 1.35,
+    "autonomiaCritica": 7,
+    "autonomiaBaja": 15,
+    "autonomiaMaximaInformadaDias": 60,
+    "confianzaMinima": 0.60,
+    "antiguedadMaximaDias": 15,
+    "coberturaMinima": 0.70,
+    "persistenciaMinima": 2
+  }
+}

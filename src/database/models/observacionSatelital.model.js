@@ -31,6 +31,14 @@ const ObservacionSatelital = sequelize.define(
       type: DataTypes.DECIMAL(5, 2),
       allowNull: true,
     },
+    // Clase de cobertura de suelo de MapBiomas que ya viene en la respuesta
+    // del modelo predictivo (datos_imagen_satelital.clase_cobertura_mapbiomas),
+    // ver docs/estimacion-biomasa-parada.md §9 y
+    // docs/ventana-acumulacion-utilizacion-bibliografia.md §5.
+    clase_cobertura_mapbiomas: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
   },
   {
     tableName: 'observacion_satelital',

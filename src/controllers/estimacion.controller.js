@@ -2,15 +2,12 @@
 
 const potreroRepository = require('../database/sql/potrero.repository');
 const ganadoRepository = require('../database/sql/ganado.repository');
-const observacionSatelitalRepository = require('../database/sql/observacionSatelital.repository');
-const datoClimaticoRepository = require('../database/sql/datoClimatico.repository');
 const disponibilidadForrajeraRepository = require('../database/sql/disponibilidadForrajera.repository');
 const estimacionDemandaRepository = require('../database/sql/estimacionDemanda.repository');
-const { sequelize } = require('../database/sequelize');
 const { toMysqlDatetimeUtc } = require('../utils/mysqlDate');
-const { predictDmp, predictDmi, ModeloPredictivoError } = require('../services/modeloPredictivo.client');
+const { predictDmi, ModeloPredictivoError } = require('../services/modeloPredictivo.client');
+const { generarEstimacionForrajera } = require('../services/estimacionForrajera.service');
 
-const VERSION_DMP = 'dmp-model';
 const VERSION_DMI = 'dmi-model';
 
 // Claves reales del modelo (metadata de dmi_model.joblib), no coinciden
@@ -46,9 +43,9 @@ async function crearEstimacionForrajera(req, res) {
   const id_potrero = req.potrero.id_potrero;
   const potrero = await potreroRepository.getPotreroById(id_potrero);
 
-  let respuestaModelo;
+  let resultado;
   try {
-    respuestaModelo = await predictDmp({ nombre_potrero: potrero.nombre, geojson: potrero.geom });
+    resultado = await generarEstimacionForrajera(potrero);
   } catch (error) {
     if (error instanceof ModeloPredictivoError) {
       return res.status(502).json({ error: error.message });
@@ -56,51 +53,7 @@ async function crearEstimacionForrajera(req, res) {
     throw error;
   }
 
-  const {
-    datos_imagen_satelital: imagen,
-    feature_vector_enviado_al_modelo: features,
-    prediccion: { dmp_kg_ms_ha_dia, dmp_kg_ms_ha_periodo },
-  } = respuestaModelo;
-
-  const { observacion, clima, disponibilidad } = await sequelize.transaction(async (t) => {
-    const observacionCreada = await observacionSatelitalRepository.crearObservacion(
-      {
-        id_potrero,
-        fuente: 'SENTINEL2',
-        fecha: imagen.fecha_exacta_captura,
-        ndvi: features.ndvi_promedio,
-        nubosidad: imagen.nubosidad_pct,
-      },
-      t
-    );
-
-    const climaCreado = await datoClimaticoRepository.crearDato(
-      {
-        id_potrero,
-        fuente: 'MODELO_PREDICTIVO',
-        fecha: imagen.fecha_exacta_captura,
-        temperatura: features.temperatura_media_del_dia,
-        precipitacion: features.precipitacion_del_dia,
-        humedad: features.humedad_relativa_del_dia,
-      },
-      t
-    );
-
-    const disponibilidadCreada = await disponibilidadForrajeraRepository.crear(
-      {
-        id_potrero,
-        fecha_calculo: toMysqlDatetimeUtc(new Date()),
-        kg_materia_seca_ha: dmp_kg_ms_ha_dia,
-        superficie_analizada_ha: potrero.superficie_ha,
-        indice_ndvi: features.ndvi_promedio,
-        version_modelo: VERSION_DMP,
-        nivel_confianza: null,
-      },
-      t
-    );
-
-    return { observacion: observacionCreada, clima: climaCreado, disponibilidad: disponibilidadCreada };
-  });
+  const { observacion, clima, disponibilidad, dmp_kg_ms_ha_periodo } = resultado;
 
   // dmp_kg_ms_ha_periodo no tiene columna propia todavía (no hace falta
   // persistirlo por ahora); viaja en la respuesta para no perderlo.
