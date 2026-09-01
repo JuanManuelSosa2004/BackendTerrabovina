@@ -62,7 +62,7 @@ const FECHA_CAPTURA_FIJA = '2026-07-31';
 function dmpResponse(overrides = {}) {
   return {
     datos_imagen_satelital: {
-      cobertura_suelo_mapbiomas: 'Pasturas',
+      clase_cobertura_mapbiomas: 'Pasturas',
       fecha_exacta_captura: FECHA_CAPTURA_FIJA,
       id_escena_sentinel2: 'S2B_21JWJ_20260731_0_L2A',
       nubosidad_pct: 8.8,
@@ -173,7 +173,7 @@ describe('necesitaEstimacion', () => {
       fecha: new Date().toISOString().slice(0, 10),
       ndvi: 0.5,
       nubosidad: 5,
-      cobertura_suelo_mapbiomas: 'Pasturas',
+      clase_cobertura_mapbiomas: 'Pasturas',
     });
     await expect(necesitaEstimacion(id_potrero)).resolves.toBe(false);
   });
@@ -186,7 +186,7 @@ describe('necesitaEstimacion', () => {
       fecha: FECHA_CAPTURA_FIJA,
       ndvi: 0.5,
       nubosidad: 5,
-      cobertura_suelo_mapbiomas: 'Pasturas',
+      clase_cobertura_mapbiomas: 'Pasturas',
     });
     await expect(necesitaEstimacion(id_potrero)).resolves.toBe(true);
   });
@@ -202,7 +202,7 @@ describe('ejecutarCicloEstimacionForrajera', () => {
 
     const observacion = await observacionSatelitalRepository.getUltimaByPotrero(id_potrero);
     expect(observacion).not.toBeNull();
-    expect(observacion.cobertura_suelo_mapbiomas).toBe('Pasturas');
+    expect(observacion.clase_cobertura_mapbiomas).toBe('Pasturas');
 
     const disponibilidad = await disponibilidadForrajeraRepository.getUltimaByPotrero(id_potrero);
     expect(Number(disponibilidad.kg_materia_seca_ha)).toBe(45.6);
@@ -218,7 +218,7 @@ describe('ejecutarCicloEstimacionForrajera', () => {
       fecha: new Date().toISOString().slice(0, 10),
       ndvi: 0.5,
       nubosidad: 5,
-      cobertura_suelo_mapbiomas: 'Pasturas',
+      clase_cobertura_mapbiomas: 'Pasturas',
     });
 
     await ejecutarCicloEstimacionForrajera();
@@ -234,7 +234,7 @@ describe('ejecutarCicloEstimacionForrajera', () => {
       fecha: FECHA_CAPTURA_FIJA,
       ndvi: 0.5,
       nubosidad: 5,
-      cobertura_suelo_mapbiomas: 'Pasturas',
+      clase_cobertura_mapbiomas: 'Pasturas',
     });
 
     await ejecutarCicloEstimacionForrajera();

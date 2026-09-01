@@ -24,6 +24,7 @@ const {
   calcularBalance,
   calcularCarga,
   calcularAutonomia,
+  resolverPerfil,
   acumularStock,
   construirConsumoDesdeAsignaciones,
   proyectarConsumoRetroactivo,
@@ -147,11 +148,26 @@ async function generarRecomendacion({
 }) {
   const superficieHa = superficie_ha ?? (potrero ? potrero.superficie_ha : null);
 
+  // La cobertura se resuelve PRIMERO porque determina el factor de utilización
+  // que aplica el balance. Viene de la última observación satelital cuando no
+  // llega por parámetro.
+  //
+  // Que no se reconozca no bloquea la recomendación —sería demasiado estricto—
+  // pero queda registrado: el perfil por defecto es pastizal natural, y
+  // aplicarlo a una pastura subestima la oferta en un 10 %, que es la
+  // diferencia entre sus factores de utilización.
+  let cobertura = claseCobertura;
+  if (!cobertura && potrero) {
+    const ultima = await observacionSatelitalRepository.getUltimaByPotrero(potrero.id_potrero);
+    cobertura = ultima ? ultima.clase_cobertura_mapbiomas : null;
+  }
+  const perfilResuelto = resolverPerfil(cobertura);
+
   const balance = calcularBalance({
     kgMsHaDia: disponibilidad.kg_materia_seca_ha,
     superficieHa,
     demandaTotalKgDia: estimacion.kg_materia_seca_dia,
-    claseCobertura,
+    claseCobertura: perfilResuelto.clave,
   });
 
   const carga = calcularCarga({
@@ -161,21 +177,13 @@ async function generarRecomendacion({
     superficieHa,
   });
 
-  // La cobertura del potrero elige el perfil de parámetros. Viene de la última
-  // observación satelital; sin ella se usa el perfil por defecto.
-  let cobertura = claseCobertura;
-  if (!cobertura && potrero) {
-    const ultima = await observacionSatelitalRepository.getUltimaByPotrero(potrero.id_potrero);
-    cobertura = ultima ? ultima.cobertura_suelo_mapbiomas : null;
-  }
-
   // Si no llegó armado desde afuera, se calcula acá.
   let stockCalculado = stock;
   if (!stockCalculado && potrero && carga && carga.consumoMedioAnimalKgDia) {
     stockCalculado = await calcularStockDePotrero({
       id_potrero: potrero.id_potrero,
       superficieHa,
-      claseCobertura: cobertura,
+      claseCobertura: perfilResuelto.clave,
       consumoMedioAnimalKgDia: carga.consumoMedioAnimalKgDia,
       fechaAltaPotrero: potrero.created_at ?? potrero.createdAt ?? null,
     });
@@ -217,6 +225,9 @@ async function generarRecomendacion({
     nivelConfianza: disponibilidad.nivel_confianza,
     confianzaMinima: parametros.umbrales.confianzaMinima,
     pesosFueraDeRango: estimacion.pesos_fuera_de_rango === true,
+
+    coberturaReconocida: perfilResuelto.reconocida,
+    perfilAplicado: perfilResuelto.clave,
 
     tipoAnterior,
   });

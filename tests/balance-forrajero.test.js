@@ -14,6 +14,8 @@ const {
   proyectarConsumoRetroactivo,
   construirConsumoDesdeAsignaciones,
   calcularCarga,
+  resolverPerfil,
+  perfilPara,
 } = require('../src/services/balanceForrajero.service');
 
 describe('estacionDe', () => {
@@ -53,6 +55,59 @@ describe('ventanaDiasPara', () => {
     expect(ventanaDiasPara('INEXISTENTE', '2026-07-20')).toBe(
       ventanaDiasPara('PASTIZAL_NATURAL', '2026-07-20')
     );
+  });
+});
+
+describe('resolverPerfil — mapeo de coberturas de MapBiomas', () => {
+  test('reconoce el texto que devuelve el modelo, no solo la clave del perfil', () => {
+    // El modelo entrega 'Pasturas'; sin mapeo, perfilPara caía al perfil de
+    // defecto y toda pastura recibía los parámetros del pastizal natural.
+    const r = resolverPerfil('Pasturas');
+    expect(r.clave).toBe('PASTURA_IMPLANTADA');
+    expect(r.reconocida).toBe(true);
+    expect(r.perfil.factorUtilizacion).toBe(0.55);
+  });
+
+  test('ignora mayúsculas, acentos y plural', () => {
+    for (const v of ['Pastura', 'PASTURAS', 'pasturas']) {
+      expect(resolverPerfil(v).clave).toBe('PASTURA_IMPLANTADA');
+    }
+    for (const v of ['Pastizal', 'Campo Natural', 'Formación herbácea', 'formacion herbacea']) {
+      expect(resolverPerfil(v).clave).toBe('PASTIZAL_NATURAL');
+    }
+  });
+
+  test('sigue aceptando la clave del perfil directamente', () => {
+    expect(resolverPerfil('PASTIZAL_NATURAL').reconocida).toBe(true);
+    expect(resolverPerfil('PASTURA_IMPLANTADA').reconocida).toBe(true);
+  });
+
+  test('reconoce las clases agrícolas que devuelve el modelo', () => {
+    // El modelo entrega 'Cultivos temporarios' para un verdeo bajo pastoreo.
+    expect(resolverPerfil('Cultivos temporarios').clave).toBe('PASTURA_IMPLANTADA');
+    expect(resolverPerfil('Cultivos temporarios').reconocida).toBe(true);
+  });
+
+  test('una clase desconocida cae al perfil por defecto pero queda marcada', () => {
+    // Es la distinción que faltaba: el mismo perfil, distinta procedencia.
+    for (const v of ['Bosque nativo', 'Cuerpo de agua', 'Área sin vegetación']) {
+      const r = resolverPerfil(v);
+      expect(r.clave).toBe('PASTIZAL_NATURAL');
+      expect(r.reconocida).toBe(false);
+    }
+  });
+
+  test('la ausencia de cobertura también cae al defecto sin reconocer', () => {
+    for (const v of [null, undefined, '', '   ']) {
+      const r = resolverPerfil(v);
+      expect(r.clave).toBe('PASTIZAL_NATURAL');
+      expect(r.reconocida).toBe(false);
+    }
+  });
+
+  test('perfilPara sigue funcionando como antes', () => {
+    expect(perfilPara('Pasturas').factorUtilizacion).toBe(0.55);
+    expect(perfilPara('cualquier cosa').factorUtilizacion).toBe(0.5);
   });
 });
 

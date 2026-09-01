@@ -53,7 +53,7 @@ function potreroPolygon(index, boxIndex = 0) {
 function dmpResponse(overrides = {}) {
   return {
     datos_imagen_satelital: {
-      cobertura_suelo_mapbiomas: 'Pasturas',
+      clase_cobertura_mapbiomas: 'Pasturas',
       fecha_exacta_captura: '2026-07-31',
       id_escena_sentinel2: 'S2B_21JWJ_20260731_0_L2A',
       nubosidad_pct: 8.8,

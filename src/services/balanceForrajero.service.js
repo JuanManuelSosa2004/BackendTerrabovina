@@ -64,9 +64,64 @@ function estacionDe(fecha) {
   return 'invierno';
 }
 
-function perfilPara(claseCobertura) {
+/**
+ * Normaliza una clase de cobertura para compararla: minúsculas, sin acentos,
+ * sin plural y sin espacios de más.
+ *
+ * El modelo devuelve la clase de MapBiomas como texto libre —'Pasturas',
+ * 'Pastizal', 'Formación herbácea'— mientras que los perfiles se identifican
+ * con claves en mayúsculas y guión bajo. Comparar los dos crudos nunca
+ * coincide.
+ */
+function normalizarCobertura(valor) {
+  if (typeof valor !== 'string') return null;
+  const limpio = valor
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!limpio) return null;
+  // 'pasturas' y 'pastura' son la misma clase.
+  return limpio.replace(/s\b/g, '');
+}
+
+/**
+ * Resuelve la clase de cobertura a un perfil de parámetros.
+ *
+ * Devuelve además si la clase fue reconocida. La distinción importa: una clase
+ * desconocida y una clase ausente producen el mismo perfil —el de defecto—
+ * pero significan cosas distintas, y sin el indicador el sistema aplicaría
+ * pastizal natural a un potrero de pastura sin que nadie se entere.
+ *
+ * @returns {{ clave: string, perfil: object, reconocida: boolean }}
+ */
+function resolverPerfil(claseCobertura) {
   const perfiles = parametros.perfiles;
-  return perfiles[claseCobertura] || perfiles[parametros.perfilPorDefecto];
+  const porDefecto = { clave: parametros.perfilPorDefecto, perfil: perfiles[parametros.perfilPorDefecto], reconocida: false };
+
+  // Una clave de perfil pasada directamente, como hacen los tests.
+  if (typeof claseCobertura === 'string' && perfiles[claseCobertura]) {
+    return { clave: claseCobertura, perfil: perfiles[claseCobertura], reconocida: true };
+  }
+
+  const norm = normalizarCobertura(claseCobertura);
+  if (norm === null) return porDefecto;
+
+  const mapeo = parametros.mapeoCobertura ?? {};
+  for (const [clave, alias] of Object.entries(mapeo)) {
+    if (!perfiles[clave] || !Array.isArray(alias)) continue;
+    if (alias.some((a) => normalizarCobertura(a) === norm)) {
+      return { clave, perfil: perfiles[clave], reconocida: true };
+    }
+  }
+
+  return porDefecto;
+}
+
+function perfilPara(claseCobertura) {
+  return resolverPerfil(claseCobertura).perfil;
 }
 
 /**
@@ -575,5 +630,7 @@ module.exports = {
   ventanaDiasPara,
   estacionDe,
   perfilPara,
+  resolverPerfil,
+  normalizarCobertura,
   parametros,
 };

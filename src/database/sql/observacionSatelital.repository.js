@@ -4,7 +4,7 @@ const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../sequelize');
 
 const SELECT_FIELDS =
-  'id_observacion, id_potrero, fuente, fecha, ndvi, nubosidad, cobertura_suelo_mapbiomas, created_at';
+  'id_observacion, id_potrero, fuente, fecha, ndvi, nubosidad, clase_cobertura_mapbiomas, created_at';
 
 async function getUltimaByPotrero(id_potrero) {
   const rows = await sequelize.query(
@@ -35,11 +35,11 @@ async function getHistorialByPotrero(id_potrero, { desde, hasta } = {}) {
   );
 }
 
-async function crearObservacion({ id_potrero, fuente, fecha, ndvi, nubosidad, cobertura_suelo_mapbiomas }, transaction) {
+async function crearObservacion({ id_potrero, fuente, fecha, ndvi, nubosidad, clase_cobertura_mapbiomas }, transaction) {
   const [insertId] = await sequelize.query(
     `INSERT INTO \`observacion_satelital\`
-       (id_potrero, fuente, fecha, ndvi, nubosidad, cobertura_suelo_mapbiomas, created_at)
-     VALUES (:id_potrero, :fuente, :fecha, :ndvi, :nubosidad, :cobertura_suelo_mapbiomas, NOW())`,
+       (id_potrero, fuente, fecha, ndvi, nubosidad, clase_cobertura_mapbiomas, created_at)
+     VALUES (:id_potrero, :fuente, :fecha, :ndvi, :nubosidad, :clase_cobertura_mapbiomas, NOW())`,
     {
       replacements: {
         id_potrero,
@@ -47,7 +47,7 @@ async function crearObservacion({ id_potrero, fuente, fecha, ndvi, nubosidad, co
         fecha,
         ndvi,
         nubosidad: nubosidad ?? null,
-        cobertura_suelo_mapbiomas: cobertura_suelo_mapbiomas ?? null,
+        clase_cobertura_mapbiomas: clase_cobertura_mapbiomas ?? null,
       },
       type: QueryTypes.INSERT,
       transaction,

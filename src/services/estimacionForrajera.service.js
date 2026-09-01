@@ -63,7 +63,15 @@ async function generarEstimacionForrajera(potrero, { evitarDuplicados = false } 
         fecha: imagen.fecha_exacta_captura,
         ndvi: features.ndvi_promedio,
         nubosidad: imagen.nubosidad_pct,
-        cobertura_suelo_mapbiomas: imagen.cobertura_suelo_mapbiomas,
+        // Viaja en el vector de features, no en datos_imagen_satelital. La
+        // versión anterior la buscaba como `cobertura_suelo_mapbiomas` dentro
+        // de `imagen`: nombre equivocado y objeto equivocado, de modo que
+        // obtenía undefined y la columna quedaba siempre en NULL. Como
+        // resolverPerfil cae al perfil por defecto ante una cobertura ausente,
+        // todo potrero terminaba usando los parámetros del pastizal natural.
+        // Se conserva `imagen` como respaldo por si el modelo la mueve.
+        clase_cobertura_mapbiomas:
+          features.clase_cobertura_mapbiomas ?? imagen.clase_cobertura_mapbiomas ?? null,
       },
       t
     );
