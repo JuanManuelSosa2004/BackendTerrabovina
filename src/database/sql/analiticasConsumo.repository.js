@@ -76,7 +76,56 @@ async function getAnaliticasConsumo(id_estancia) {
     kg_materia_seca_ha_promedio: Number(Number(row.kg_materia_seca_ha_promedio).toFixed(2)),
   }));
 
-  return { distribucionCargaAnimal, distribucionForraje, crecimientoForraje7dias };
+  const ultimoStockPorPotrero = await sequelize.query(
+    `SELECT ranked.id_potrero, p.nombre, ranked.stock_final_total_kg_ms,
+            ranked.stock_final_central_kg_ms_ha, ranked.crecimiento_utilizable_kg_ms_ha_dia,
+            ranked.consumo_diario_kg_ms_ha
+     FROM (
+       SELECT es.*, ROW_NUMBER() OVER (
+         PARTITION BY es.id_potrero ORDER BY es.fecha_calculo DESC, es.id_estimacion_stock DESC
+       ) AS rn
+       FROM estimacion_stock es
+       JOIN potrero p2 ON p2.id_potrero = es.id_potrero
+       WHERE p2.id_estancia = :id_estancia AND p2.activo = TRUE
+     ) ranked
+     JOIN potrero p ON p.id_potrero = ranked.id_potrero
+     WHERE ranked.rn = 1`,
+    { replacements: { id_estancia }, type: QueryTypes.SELECT }
+  );
+  const totalStock = ultimoStockPorPotrero.reduce((sum, row) => sum + Number(row.stock_final_total_kg_ms), 0);
+  const distribucionStock = ultimoStockPorPotrero.map((row) => ({
+    id_potrero: row.id_potrero,
+    nombre: row.nombre,
+    stock_total_kg_ms: Number(row.stock_final_total_kg_ms),
+    stock_kg_ms_ha: Number(row.stock_final_central_kg_ms_ha),
+    crecimiento_utilizable_kg_ms_ha_dia: Number(row.crecimiento_utilizable_kg_ms_ha_dia),
+    consumo_diario_kg_ms_ha: Number(row.consumo_diario_kg_ms_ha),
+    porcentaje: totalStock > 0 ? Number((Number(row.stock_final_total_kg_ms) / totalStock * 100).toFixed(2)) : 0,
+  }));
+
+  const evolucionStock7diasRaw = await sequelize.query(
+    `SELECT DATE(es.fecha_calculo) AS fecha,
+            AVG(es.stock_final_central_kg_ms_ha) AS stock_kg_ms_ha_promedio
+     FROM estimacion_stock es
+     JOIN potrero p ON p.id_potrero = es.id_potrero
+     WHERE p.id_estancia = :id_estancia AND p.activo = TRUE
+       AND es.fecha_calculo >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+     GROUP BY DATE(es.fecha_calculo) ORDER BY fecha ASC`,
+    { replacements: { id_estancia }, type: QueryTypes.SELECT }
+  );
+  const evolucionStock7dias = evolucionStock7diasRaw.map((row) => ({
+    fecha: row.fecha,
+    stock_kg_ms_ha_promedio: Number(Number(row.stock_kg_ms_ha_promedio).toFixed(2)),
+  }));
+
+  return {
+    distribucionCargaAnimal,
+    distribucionStock,
+    evolucionStock7dias,
+    // Compatibilidad temporal con clientes anteriores.
+    distribucionForraje,
+    crecimientoForraje7dias,
+  };
 }
 
 module.exports = { getAnaliticasConsumo };

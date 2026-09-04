@@ -20,22 +20,25 @@
 
 const BASE_URL = (process.env.MODEL_API_BASE_URL || '').replace(/\/$/, '');
 const TIMEOUT_MS = Number(process.env.MODEL_API_TIMEOUT_MS) || 15000;
+const STOCK_TIMEOUT_MS = Number(process.env.MODEL_API_STOCK_TIMEOUT_MS) || 300000;
 
 class ModeloPredictivoError extends Error {
-  constructor(message, { cause } = {}) {
+  constructor(message, { cause, status, detail } = {}) {
     super(message);
     this.name = 'ModeloPredictivoError';
     if (cause) this.cause = cause;
+    this.status = status;
+    this.detail = detail;
   }
 }
 
-async function postJson(path, body) {
+async function postJson(path, body, timeoutMs = TIMEOUT_MS) {
   if (!BASE_URL) {
     throw new ModeloPredictivoError('MODEL_API_BASE_URL no está configurada.');
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let response;
   try {
@@ -54,7 +57,8 @@ async function postJson(path, body) {
   if (!response.ok) {
     const detalle = await response.text().catch(() => '');
     throw new ModeloPredictivoError(
-      `El modelo predictivo respondió ${response.status} en ${path}.${detalle ? ` ${detalle}` : ''}`
+      `El modelo predictivo respondió ${response.status} en ${path}.${detalle ? ` ${detalle}` : ''}`,
+      { status: response.status, detail: detalle }
     );
   }
 
@@ -85,4 +89,14 @@ function predictDmi({ animales }) {
   return postJson('/predict/dmi', { animales });
 }
 
-module.exports = { predictDmp, predictDmi, ModeloPredictivoError };
+function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms, geojson }) {
+  return postJson('/predict/stock', {
+    nombre_potrero,
+    fecha,
+    consumo_diario_total_kg_ms,
+    consumo_fuente: 'ultima_estimacion_dmi_persistida',
+    geojson,
+  }, STOCK_TIMEOUT_MS);
+}
+
+module.exports = { predictDmp, predictDmi, predictStock, ModeloPredictivoError };

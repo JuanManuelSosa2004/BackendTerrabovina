@@ -7,6 +7,7 @@ jest.mock('../src/services/modeloPredictivo.client', () => {
   return {
     predictDmp: jest.fn(),
     predictDmi: jest.fn(),
+    predictStock: jest.fn(),
     ModeloPredictivoError,
   };
 });
@@ -15,7 +16,7 @@ const request = require('supertest');
 const app = require('../src/app');
 const { sequelize } = require('../src/database/sequelize');
 const { QueryTypes } = require('sequelize');
-const { predictDmp, predictDmi, ModeloPredictivoError } = require('../src/services/modeloPredictivo.client');
+const { predictDmp, predictDmi, predictStock, ModeloPredictivoError } = require('../src/services/modeloPredictivo.client');
 
 function polygon(coords) {
   return { type: 'Polygon', coordinates: [coords] };
@@ -83,6 +84,30 @@ function dmiResponse(overrides = {}) {
   };
 }
 
+function stockResponse() {
+  return {
+    estado: 'OK', metodologia: 'gis_matriz_regional_por_anomalia_dmp_y_balance_30_dias',
+    potrero: { fecha_inicio: '2026-07-07', fecha_objetivo: '2026-08-05', superficie_ha: 50 },
+    contexto_gis: { ecorregiones: [{ nombre: 'Campos y Malezales' }], unidades_vegetacion: [{ codigo: 'U27' }] },
+    seleccion_referencia: { estado: 'PARCIAL' },
+    crecimiento: {
+      crecimiento_bruto_promedio_kg_ms_ha_dia: { central: 4.36 },
+      crecimiento_utilizable_promedio_kg_ms_ha_dia: { central: 2.18 },
+      produccion_utilizable_acumulada_kg_ms_ha: { central: 65.39 },
+    },
+    stock_inicial_estimado: { confianza: 'BAJA', valor_kg_ms_ha: { min: 637.65, central: 850.2, max: 1062.75 } },
+    consumo: { diario_total_potrero_kg_ms: 18.63, diario_kg_ms_ha: 0.373, acumulado_kg_ms_ha: 11.18 },
+    stock_final_utilizable: {
+      valor_kg_ms_ha: { min: 691.86, central: 904.41, max: 1116.96 },
+      total_potrero_kg_ms: { min: 34593, central: 45220.5, max: 55848 },
+    },
+    coherencia: {
+      estado: 'REVISAR', confianza_geografica: 'ALTA', confianza_ambiental: 'BAJA',
+      confianza_satelital: 'ALTA', confianza_historica: 'MEDIA',
+    },
+  };
+}
+
 const usuariosCreados = [];
 let contador = 0;
 let contadorUsuarios = 0;
@@ -131,6 +156,7 @@ function crearGanadoEnPotrero(token, id_potrero, overrides = {}) {
 beforeEach(() => {
   predictDmp.mockReset();
   predictDmi.mockReset();
+  predictStock.mockReset();
 });
 
 beforeAll(async () => {
@@ -365,5 +391,45 @@ describe('POST /api/v2/potrero/:id/estimacion-nutricional', () => {
       token
     );
     expect(despues.body.estimaciones).toHaveLength(cantidadPrevia);
+  });
+});
+
+describe('Stock usa el último DMI persistido', () => {
+  let token, id_potrero, boxIndex;
+
+  beforeAll(async () => {
+    ({ token, id_potrero, boxIndex } = await crearEstanciaConPotrero());
+  });
+
+  test('rechaza el cálculo si todavía no existe DMI', async () => {
+    const res = await authHeader(request(app).post(`/api/v2/potrero/${id_potrero}/estimacion-stock`), token)
+      .send({ fecha: '2026-08-05' });
+    expect(res.status).toBe(409);
+    expect(predictStock).not.toHaveBeenCalled();
+  });
+
+  test('calcula, persiste y recupera Stock sin volver a ejecutar DMI', async () => {
+    await crearGanadoEnPotrero(token, id_potrero, { categoria: 'VACA' });
+    predictDmi.mockResolvedValueOnce({ advertencias: [], predicciones: [{ animal_id: '1', dmi_kg_dia: 18.63 }] });
+    const dmi = await authHeader(request(app).post(`/api/v2/potrero/${id_potrero}/estimacion-nutricional`), token);
+    expect(dmi.status).toBe(201);
+
+    predictStock.mockResolvedValueOnce(stockResponse());
+    const result = await authHeader(request(app).post(`/api/v2/potrero/${id_potrero}/estimacion-stock`), token)
+      .send({ fecha: '2026-08-05' });
+    expect(result.status).toBe(201);
+    expect(predictStock).toHaveBeenCalledWith(expect.objectContaining({
+      nombre_potrero: 'Potrero Modelo', fecha: '2026-08-05',
+      consumo_diario_total_kg_ms: 18.63, geojson: potreroPolygon(0, boxIndex),
+    }));
+    expect(Number(result.body.stock_final_central_kg_ms_ha)).toBe(904.41);
+    expect(Number(result.body.crecimiento_utilizable_kg_ms_ha_dia)).toBe(2.18);
+    expect(result.body.id_estimacion_demanda).toBe(dmi.body.id_estimacion);
+
+    const latest = await authHeader(request(app).get(`/api/v2/potrero/${id_potrero}/estimacion-stock`), token);
+    expect(latest.status).toBe(200);
+    expect(latest.body.detalle_json.metodologia).toContain('balance_30_dias');
+    const history = await authHeader(request(app).get(`/api/v2/potrero/${id_potrero}/estimacion-stock/historico`), token);
+    expect(history.body.estimaciones).toHaveLength(1);
   });
 });

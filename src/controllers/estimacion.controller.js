@@ -6,9 +6,10 @@ const observacionSatelitalRepository = require('../database/sql/observacionSatel
 const datoClimaticoRepository = require('../database/sql/datoClimatico.repository');
 const disponibilidadForrajeraRepository = require('../database/sql/disponibilidadForrajera.repository');
 const estimacionDemandaRepository = require('../database/sql/estimacionDemanda.repository');
+const estimacionStockRepository = require('../database/sql/estimacionStock.repository');
 const { sequelize } = require('../database/sequelize');
 const { toMysqlDatetimeUtc } = require('../utils/mysqlDate');
-const { predictDmp, predictDmi, ModeloPredictivoError } = require('../services/modeloPredictivo.client');
+const { predictDmp, predictDmi, predictStock, ModeloPredictivoError } = require('../services/modeloPredictivo.client');
 
 const VERSION_DMP = 'dmp-model';
 const VERSION_DMI = 'dmi-model';
@@ -185,4 +186,112 @@ async function historicoNutricional(req, res) {
   return res.json({ estimaciones: historico });
 }
 
-module.exports = { crearEstimacionForrajera, historicoForrajera, crearEstimacionNutricional, historicoNutricional };
+function fechaLocalActual() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function fechaValida(fecha) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
+  const parsed = new Date(`${fecha}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === fecha;
+}
+
+function stockPersistible(id_potrero, dmi, resultado) {
+  const { potrero, crecimiento, consumo, coherencia, seleccion_referencia: seleccion } = resultado;
+  const inicial = resultado.stock_inicial_estimado;
+  const final = resultado.stock_final_utilizable;
+  return {
+    id_potrero,
+    id_estimacion_demanda: dmi.id_estimacion,
+    fecha_inicio: potrero.fecha_inicio,
+    fecha_objetivo: potrero.fecha_objetivo,
+    fecha_calculo: toMysqlDatetimeUtc(new Date()),
+    superficie_ha: potrero.superficie_ha,
+    consumo_diario_total_kg_ms: consumo.diario_total_potrero_kg_ms,
+    consumo_diario_kg_ms_ha: consumo.diario_kg_ms_ha,
+    consumo_acumulado_kg_ms_ha: consumo.acumulado_kg_ms_ha,
+    crecimiento_bruto_kg_ms_ha_dia: crecimiento.crecimiento_bruto_promedio_kg_ms_ha_dia.central,
+    crecimiento_utilizable_kg_ms_ha_dia: crecimiento.crecimiento_utilizable_promedio_kg_ms_ha_dia.central,
+    produccion_utilizable_kg_ms_ha: crecimiento.produccion_utilizable_acumulada_kg_ms_ha.central,
+    stock_inicial_min_kg_ms_ha: inicial.valor_kg_ms_ha.min,
+    stock_inicial_central_kg_ms_ha: inicial.valor_kg_ms_ha.central,
+    stock_inicial_max_kg_ms_ha: inicial.valor_kg_ms_ha.max,
+    stock_final_min_kg_ms_ha: final.valor_kg_ms_ha.min,
+    stock_final_central_kg_ms_ha: final.valor_kg_ms_ha.central,
+    stock_final_max_kg_ms_ha: final.valor_kg_ms_ha.max,
+    stock_final_total_kg_ms: final.total_potrero_kg_ms.central,
+    ecorregion: resultado.contexto_gis?.ecorregiones?.[0]?.nombre ?? null,
+    unidad_vegetacion: resultado.contexto_gis?.unidades_vegetacion?.[0]?.codigo ?? null,
+    seleccion_regional_estado: seleccion.estado,
+    confianza_geografica: coherencia.confianza_geografica,
+    confianza_ambiental: coherencia.confianza_ambiental,
+    confianza_satelital: coherencia.confianza_satelital,
+    confianza_historica: coherencia.confianza_historica,
+    confianza_stock_inicial: inicial.confianza,
+    estado: coherencia.estado,
+    version_metodologia: resultado.metodologia,
+    detalle_json: resultado,
+  };
+}
+
+async function crearEstimacionStock(req, res) {
+  const id_potrero = req.potrero.id_potrero;
+  const fecha = req.body?.fecha ?? fechaLocalActual();
+  if (!fechaValida(fecha)) return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD y ser válida.' });
+  if (fecha > fechaLocalActual()) return res.status(400).json({ error: 'La fecha de Stock no puede ser futura.' });
+
+  const [potrero, dmi] = await Promise.all([
+    potreroRepository.getPotreroById(id_potrero),
+    estimacionDemandaRepository.getUltimaByPotrero(id_potrero),
+  ]);
+  if (!dmi) return res.status(409).json({ error: 'Primero calculá la demanda nutricional DMI de este potrero.' });
+
+  let resultado;
+  try {
+    resultado = await predictStock({
+      nombre_potrero: potrero.nombre,
+      fecha,
+      consumo_diario_total_kg_ms: Number(dmi.kg_materia_seca_dia),
+      geojson: potrero.geom,
+    });
+  } catch (error) {
+    if (error instanceof ModeloPredictivoError) {
+      const status = error.status === 400 ? 400 : error.status === 422 ? 422 : 502;
+      return res.status(status).json({ error: error.message });
+    }
+    throw error;
+  }
+
+  const estimacion = await sequelize.transaction((transaction) =>
+    estimacionStockRepository.crear(stockPersistible(id_potrero, dmi, resultado), transaction)
+  );
+  return res.status(201).json({ ...estimacion, demanda_utilizada: dmi });
+}
+
+async function ultimaEstimacionStock(req, res) {
+  const estimacion = await estimacionStockRepository.getUltimaByPotrero(req.potrero.id_potrero);
+  if (!estimacion) return res.status(404).json({ error: 'Todavía no hay una estimación de Stock para este potrero.' });
+  return res.json(estimacion);
+}
+
+async function historicoStock(req, res) {
+  const estimaciones = await estimacionStockRepository.getHistoricoByPotrero(req.potrero.id_potrero, req.query);
+  return res.json({
+    estimaciones,
+    ...(estimaciones.length === 0 ? { mensaje: 'No hay estimaciones de Stock en el rango solicitado.' } : {}),
+  });
+}
+
+module.exports = {
+  crearEstimacionForrajera,
+  historicoForrajera,
+  crearEstimacionNutricional,
+  historicoNutricional,
+  crearEstimacionStock,
+  ultimaEstimacionStock,
+  historicoStock,
+};

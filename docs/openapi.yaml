@@ -829,6 +829,56 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /potrero/{potreroId}/estimacion-stock:
+    get:
+      tags: [Estimaciones]
+      summary: Última estimación de Stock utilizable del potrero
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/potreroId"
+      responses:
+        "200":
+          description: Último Stock persistido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EstimacionStock" }
+        "404": { description: El potrero todavía no tiene Stock }
+    post:
+      tags: [Estimaciones]
+      summary: Calcula Stock usando el último DMI persistido
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/potreroId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fecha: { type: string, format: date, description: Fecha objetivo; por defecto hoy }
+      responses:
+        "201":
+          description: Stock calculado y persistido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EstimacionStock" }
+        "400": { description: Fecha inválida }
+        "409": { description: Debe calcularse primero DMI }
+        "422": { description: Sin referencia regional o datos suficientes }
+        "502": { description: El modelo o una fuente necesaria no respondió }
+
+  /potrero/{potreroId}/estimacion-stock/historico:
+    get:
+      tags: [Estimaciones]
+      summary: Histórico de Stock utilizable
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/potreroId"
+      responses:
+        "200":
+          description: Serie de estimaciones, posiblemente vacía
+
   /potrero/{potreroId}/estimacion-nutricional:
     parameters:
       - $ref: "#/components/parameters/potreroId"
@@ -1952,6 +2002,27 @@ components:
         version_modelo: { type: string, example: dmi-model }
         nivel_confianza: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
+
+    EstimacionStock:
+      type: object
+      properties:
+        id_estimacion_stock: { type: integer }
+        id_potrero: { type: integer }
+        id_estimacion_demanda: { type: integer, description: DMI utilizado como consumo diario }
+        fecha_inicio: { type: string, format: date }
+        fecha_objetivo: { type: string, format: date }
+        fecha_calculo: { type: string, format: date-time }
+        superficie_ha: { type: string }
+        consumo_diario_total_kg_ms: { type: string }
+        consumo_diario_kg_ms_ha: { type: string }
+        crecimiento_bruto_kg_ms_ha_dia: { type: string }
+        crecimiento_utilizable_kg_ms_ha_dia: { type: string }
+        stock_final_min_kg_ms_ha: { type: string }
+        stock_final_central_kg_ms_ha: { type: string }
+        stock_final_max_kg_ms_ha: { type: string }
+        stock_final_total_kg_ms: { type: string }
+        estado: { type: string, enum: [COHERENTE, REVISAR] }
+        detalle_json: { type: object, description: Salida trazable completa del motor Stock }
 
     DmiPrediccionAnimal:
       type: object

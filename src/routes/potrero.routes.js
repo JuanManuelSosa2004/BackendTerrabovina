@@ -37,6 +37,10 @@ router.get('/:potreroId/estimacion-forrajera/historico', estimacionController.hi
 router.post('/:potreroId/estimacion-nutricional', estimacionController.crearEstimacionNutricional);
 router.get('/:potreroId/estimacion-nutricional/historico', estimacionController.historicoNutricional);
 
+router.post('/:potreroId/estimacion-stock', estimacionController.crearEstimacionStock);
+router.get('/:potreroId/estimacion-stock', estimacionController.ultimaEstimacionStock);
+router.get('/:potreroId/estimacion-stock/historico', estimacionController.historicoStock);
+
 // #34, #35
 router.post('/:potreroId/recomendacion', recomendacionController.crear);
 router.get('/:potreroId/recomendacion', recomendacionController.listar);

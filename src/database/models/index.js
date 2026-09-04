@@ -12,6 +12,7 @@ const ObservacionSatelital = require('./observacionSatelital.model');
 const DatoClimatico = require('./datoClimatico.model');
 const DisponibilidadForrajera = require('./disponibilidadForrajera.model');
 const EstimacionDemanda = require('./estimacionDemanda.model');
+const EstimacionStock = require('./estimacionStock.model');
 const Recomendacion = require('./recomendacion.model');
 
 Usuario.hasOne(Estancia, { foreignKey: 'id_usuario', as: 'estancia' });
@@ -74,6 +75,11 @@ DisponibilidadForrajera.belongsTo(Potrero, { foreignKey: 'id_potrero', as: 'potr
 Potrero.hasMany(EstimacionDemanda, { foreignKey: 'id_potrero', as: 'estimacionesDemanda' });
 EstimacionDemanda.belongsTo(Potrero, { foreignKey: 'id_potrero', as: 'potrero' });
 
+Potrero.hasMany(EstimacionStock, { foreignKey: 'id_potrero', as: 'estimacionesStock' });
+EstimacionStock.belongsTo(Potrero, { foreignKey: 'id_potrero', as: 'potrero' });
+EstimacionDemanda.hasMany(EstimacionStock, { foreignKey: 'id_estimacion_demanda', as: 'estimacionesStock' });
+EstimacionStock.belongsTo(EstimacionDemanda, { foreignKey: 'id_estimacion_demanda', as: 'estimacionDemanda' });
+
 Potrero.hasMany(Recomendacion, { foreignKey: 'id_potrero', as: 'recomendaciones' });
 Recomendacion.belongsTo(Potrero, { foreignKey: 'id_potrero', as: 'potrero' });
 
@@ -98,5 +104,6 @@ module.exports = {
   DatoClimatico,
   DisponibilidadForrajera,
   EstimacionDemanda,
+  EstimacionStock,
   Recomendacion,
 };
