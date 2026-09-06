@@ -38,6 +38,7 @@ router.post('/:potreroId/estimacion-nutricional', estimacionController.crearEsti
 router.get('/:potreroId/estimacion-nutricional/historico', estimacionController.historicoNutricional);
 
 router.post('/:potreroId/estimacion-stock', estimacionController.crearEstimacionStock);
+router.get('/:potreroId/estimacion-stock/tarea', estimacionController.estadoTareaStock);
 router.get('/:potreroId/estimacion-stock', estimacionController.ultimaEstimacionStock);
 router.get('/:potreroId/estimacion-stock/historico', estimacionController.historicoStock);
 

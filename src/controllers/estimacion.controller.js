@@ -206,7 +206,7 @@ function stockPersistible(id_potrero, dmi, resultado) {
   const final = resultado.stock_final_utilizable;
   return {
     id_potrero,
-    id_estimacion_demanda: dmi.id_estimacion,
+    id_estimacion_demanda: dmi?.id_estimacion ?? null,
     fecha_inicio: potrero.fecha_inicio,
     fecha_objetivo: potrero.fecha_objetivo,
     fecha_calculo: toMysqlDatetimeUtc(new Date()),
@@ -244,32 +244,33 @@ async function crearEstimacionStock(req, res) {
   if (!fechaValida(fecha)) return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD y ser válida.' });
   if (fecha > fechaLocalActual()) return res.status(400).json({ error: 'La fecha de Stock no puede ser futura.' });
 
+  return res.status(202).json(iniciarStock(id_potrero, fecha));
+}
+
+function iniciarStock(id_potrero, fecha = fechaLocalActual()) {
+  return require('../services/stockJobs').start(id_potrero, async () => {
   const [potrero, dmi] = await Promise.all([
     potreroRepository.getPotreroById(id_potrero),
     estimacionDemandaRepository.getUltimaByPotrero(id_potrero),
   ]);
-  if (!dmi) return res.status(409).json({ error: 'Primero calculá la demanda nutricional DMI de este potrero.' });
-
-  let resultado;
-  try {
-    resultado = await predictStock({
-      nombre_potrero: potrero.nombre,
-      fecha,
-      consumo_diario_total_kg_ms: Number(dmi.kg_materia_seca_dia),
-      geojson: potrero.geom,
+  if (!potrero || !potrero.activo) throw new Error('El potrero no está activo.');
+    const [previous, assignments, estimates] = await Promise.all([
+      estimacionStockRepository.getUltimaByPotrero(id_potrero),
+      require('../database/sql/asignacionGanado.repository').getHistorialByPotrero(id_potrero),
+      estimacionDemandaRepository.getHistoricoByPotrero(id_potrero),
+    ]);
+    const resultado = await require('../services/stockDaily.service').calculateDaily({
+      potrero, fecha, previous, assignments, estimates, predict: predictStock,
     });
-  } catch (error) {
-    if (error instanceof ModeloPredictivoError) {
-      const status = error.status === 400 ? 400 : error.status === 422 ? 422 : 502;
-      return res.status(status).json({ error: error.message });
-    }
-    throw error;
-  }
+    const estimacion = await sequelize.transaction(transaction =>
+      estimacionStockRepository.crear(stockPersistible(id_potrero, dmi, resultado), transaction)
+    );
+    return { ...estimacion, demanda_utilizada: dmi };
+  });
+}
 
-  const estimacion = await sequelize.transaction((transaction) =>
-    estimacionStockRepository.crear(stockPersistible(id_potrero, dmi, resultado), transaction)
-  );
-  return res.status(201).json({ ...estimacion, demanda_utilizada: dmi });
+function estadoTareaStock(req, res) {
+  return res.json(require('../services/stockJobs').get(req.potrero.id_potrero));
 }
 
 async function ultimaEstimacionStock(req, res) {
@@ -287,6 +288,8 @@ async function historicoStock(req, res) {
 }
 
 module.exports = {
+  iniciarStock,
+  estadoTareaStock,
   crearEstimacionForrajera,
   historicoForrajera,
   crearEstimacionNutricional,

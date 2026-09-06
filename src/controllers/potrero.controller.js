@@ -45,6 +45,10 @@ async function create(req, res) {
   await setPotreroGeom(potrero.id_potrero, normalizedGeom);
   potrero.geom = normalizedGeom;
 
+  if (potrero.activo) {
+    potrero.tarea_stock = require('./estimacion.controller').iniciarStock(potrero.id_potrero);
+  }
+
   return res.status(201).json(potrero);
 }
 

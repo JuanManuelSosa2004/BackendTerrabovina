@@ -6,7 +6,7 @@ const { sequelize } = require('../sequelize');
 const EstimacionStock = sequelize.define('EstimacionStock', {
   id_estimacion_stock: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   id_potrero: { type: DataTypes.INTEGER, allowNull: false },
-  id_estimacion_demanda: { type: DataTypes.INTEGER, allowNull: false },
+  id_estimacion_demanda: { type: DataTypes.INTEGER, allowNull: true },
   fecha_inicio: { type: DataTypes.DATEONLY, allowNull: false },
   fecha_objetivo: { type: DataTypes.DATEONLY, allowNull: false },
   fecha_calculo: { type: DataTypes.DATE, allowNull: false },

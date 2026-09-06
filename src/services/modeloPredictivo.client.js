@@ -20,7 +20,7 @@
 
 const BASE_URL = (process.env.MODEL_API_BASE_URL || '').replace(/\/$/, '');
 const TIMEOUT_MS = Number(process.env.MODEL_API_TIMEOUT_MS) || 15000;
-const STOCK_TIMEOUT_MS = Number(process.env.MODEL_API_STOCK_TIMEOUT_MS) || 300000;
+const STOCK_TIMEOUT_MS = Number(process.env.MODEL_API_STOCK_JOB_TIMEOUT_MS) || 3600000;
 
 class ModeloPredictivoError extends Error {
   constructor(message, { cause, status, detail } = {}) {
@@ -89,14 +89,30 @@ function predictDmi({ animales }) {
   return postJson('/predict/dmi', { animales });
 }
 
-function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms, geojson }) {
-  return postJson('/predict/stock', {
+async function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms, geojson, dias_actualizacion }) {
+  if (!BASE_URL) throw new ModeloPredictivoError('MODEL_API_BASE_URL no está configurada.');
+  let response;
+  try {
+  response = await require('./stockHttp').postStockJson(`${BASE_URL}/predict/stock`, {
     nombre_potrero,
     fecha,
     consumo_diario_total_kg_ms,
     consumo_fuente: 'ultima_estimacion_dmi_persistida',
     geojson,
+    ...(dias_actualizacion == null ? {} : { dias_actualizacion }),
   }, STOCK_TIMEOUT_MS);
+  } catch (cause) {
+    const code = cause.code || 'ERROR_CONEXION';
+    const message = code === 'STOCK_TIMEOUT'
+      ? `El cálculo de Stock superó el tiempo de espera de ${Math.round(STOCK_TIMEOUT_MS / 60000)} minutos.`
+      : `Se interrumpió la conexión con Flask al calcular Stock (${code}). Verificá que Flask siga ejecutándose.`;
+    throw new ModeloPredictivoError(message, {cause});
+  }
+  if (response.status < 200 || response.status >= 300) {
+    throw new ModeloPredictivoError(`El modelo predictivo respondió ${response.status} en /predict/stock. ${response.text}`, {status:response.status,detail:response.text});
+  }
+  try { return JSON.parse(response.text); }
+  catch (cause) { throw new ModeloPredictivoError('Flask devolvió una respuesta de Stock que no es JSON válido.', {cause}); }
 }
 
 module.exports = { predictDmp, predictDmi, predictStock, ModeloPredictivoError };
