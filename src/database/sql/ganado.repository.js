@@ -20,6 +20,7 @@ const BASE_SELECT = `
   ganado.condicion_corporal, ganado.estado_fisiologico, ganado.observaciones,
   ganado.activo, ganado.created_at, ganado.updated_at,
   asignacion_activa.id_potrero AS id_potrero_actual,
+  asignacion_activa.fecha_desde AS fecha_ingreso_potrero,
   potrero_actual.nombre AS potrero_actual_nombre
 `;
 
