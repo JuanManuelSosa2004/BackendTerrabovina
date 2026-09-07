@@ -340,7 +340,28 @@ async function listByPotrero(req, res) {
   return res.json(ganado);
 }
 
+async function createLoteEnPotrero(req,res) {
+  const estimation=require('./estimacion.controller');
+  try {
+    const result=await require('../services/cattleBatch').createBatch({animals:req.body?.animales,potrero:req.potrero},{
+      validate:validarCamposGanado,entryDate:require('../utils/diasPrevios').fechaIngreso,
+      predict:require('../services/modeloPredictivo.client').predictDmi,mapAnimal:estimation.aAnimalDelModelo,
+      transaction:fn=>sequelize.transaction(fn),
+      lock:(id,t)=>sequelize.query('SELECT id_potrero FROM potrero WHERE id_potrero = :id FOR UPDATE',{replacements:{id},transaction:t}),
+      count:asignacionGanadoRepository.countGanadoHistoricoByPotrero,create:ganadoRepository.createGanado,
+      assign:asignacionGanadoRepository.crearAsignacion,refresh:estimation.iniciarStock,
+    });
+    return res.status(201).json(result);
+  } catch(error) {
+    if(error.status) return res.status(error.status).json({error:error.message});
+    if(error.name==='ModeloPredictivoError') return res.status(502).json({error:'No se registró el lote: '+error.message});
+    if(isDuplicateEntryError(error)) return res.status(409).json({error:'No se registró el lote por una colisión. Reintentá.'});
+    throw error;
+  }
+}
+
 module.exports = {
+  createLoteEnPotrero,
   createEnEstancia,
   createEnPotrero,
   listByEstancia,
