@@ -27,7 +27,9 @@ function consumptionForDay(day, assignments, estimates) {
     .sort((a,b) => instant(a.fecha_calculo)-instant(b.fecha_calculo));
   let kg = 0, animalDays = 0, inferred = false;
   const used = new Set();
-  for (const intervals of byAnimal.values()) {
+  for (const [animalId, intervals] of byAnimal) {
+    const retrospective = assignments.filter(a => a.id_ganado === animalId && a.dmi_ingreso_kg_dia != null
+      && Number.isFinite(Number(a.dmi_ingreso_kg_dia)) && Number(a.dmi_ingreso_kg_dia) >= 0);
     intervals.sort((a,b) => a[0]-b[0]);
     const merged = [];
     for (const [lo, hi] of intervals) {
@@ -36,8 +38,19 @@ function consumptionForDay(day, assignments, estimates) {
       else merged.push([lo,hi]);
     }
     for (const [lo,hi] of merged) {
-      const points = [lo,...ds.map(d=>instant(d.fecha_calculo)).filter(t=>t>lo&&t<hi),hi];
+      const points = [...new Set([lo,...ds.map(d=>instant(d.fecha_calculo)),
+        ...retrospective.flatMap(a=>[instant(a.fecha_desde),instant(a.created_at), a.fecha_hasta ? instant(a.fecha_hasta) : hi]),hi]
+        .filter(t=>t>=lo&&t<=hi))].sort((a,b)=>a-b);
       for (let i=0;i<points.length-1;i++) {
+        const retro = retrospective.find(a => instant(a.fecha_desde) <= points[i] && points[i] < instant(a.created_at)
+          && (!a.fecha_hasta || points[i] < instant(a.fecha_hasta)));
+        if (retro) {
+          const fraction = (points[i+1]-points[i])/DAY;
+          animalDays += fraction;
+          kg += fraction * Number(retro.dmi_ingreso_kg_dia);
+          inferred = true;
+          continue;
+        }
         const available = ds.filter(d=>instant(d.fecha_calculo)<=points[i]);
         const d = available.at(-1) ?? ds[0];
         if (!d) throw Error('Falta DMI para estimar consumo de animales históricos.');
@@ -50,7 +63,7 @@ function consumptionForDay(day, assignments, estimates) {
     }
   }
   return { kg_ms: kg, animales_dia: animalDays, ids_dmi: [...used], dmi_retroproyectado: inferred,
-    metodo: 'fechas_asignacion_y_dmi_promedio_por_animal' };
+    metodo: 'fechas_asignacion_dmi_ingreso_retrospectivo_y_promedio_por_animal' };
 }
 
 function rowsFromCalculation(result) {

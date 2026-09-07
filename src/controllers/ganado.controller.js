@@ -97,6 +97,19 @@ async function createEnPotrero(req, res) {
   const { fecha_nacimiento, sexo, categoria, peso_kg, condicion_corporal, estado_fisiologico, observaciones } = req.body;
   const id_potrero = req.potrero.id_potrero;
   const id_estancia = req.potrero.id_estancia;
+  let fecha_desde, dmi_ingreso_kg_dia = null;
+  try {
+    fecha_desde = require('../utils/diasPrevios').fechaIngreso(req.body.dias_previos_potrero);
+    if (fecha_nacimiento && fecha_desde.slice(0,10) < fecha_nacimiento) return res.status(400).json({error:'La entrada no puede ser anterior al nacimiento.'});
+  } catch (error) { return res.status(400).json({error:error.message}); }
+  if (req.body.dias_previos_potrero !== undefined) {
+    try {
+      const { aAnimalDelModelo } = require('./estimacion.controller');
+      const prediction = await require('../services/modeloPredictivo.client').predictDmi({ animales:[aAnimalDelModelo({...req.body,id_ganado:'nuevo'})] });
+      dmi_ingreso_kg_dia = Number(prediction.predicciones?.[0]?.dmi_kg_dia);
+      if (!Number.isFinite(dmi_ingreso_kg_dia) || dmi_ingreso_kg_dia < 0) throw Error('DMI de ingreso inválido.');
+    } catch (error) { return res.status(502).json({error:`No se registró el animal: ${error.message}`}); }
+  }
 
   try {
     const ganado = await sequelize.transaction(async (t) => {
@@ -117,14 +130,16 @@ async function createEnPotrero(req, res) {
         },
         t
       );
-      const hoy = new Date().toISOString().slice(0, 10);
       await asignacionGanadoRepository.crearAsignacion(
-        { id_ganado: nuevo.id_ganado, id_potrero, fecha_desde: hoy, estado: 'ACTIVA' },
+        { id_ganado: nuevo.id_ganado, id_potrero, fecha_desde, estado: 'ACTIVA', dmi_ingreso_kg_dia },
         t
       );
       return nuevo;
     });
-    return res.status(201).json(await ganadoRepository.getGanadoById(ganado.id_ganado));
+    const saved = await ganadoRepository.getGanadoById(ganado.id_ganado);
+    const actualizacion_stock = req.body.dias_previos_potrero !== undefined
+      ? require('./estimacion.controller').iniciarStock(id_potrero, undefined, true) : undefined;
+    return res.status(201).json({...saved, actualizacion_stock});
   } catch (error) {
     if (isDuplicateEntryError(error)) {
       // Colisión entre dos altas simultáneas en el mismo potrero (mismo

@@ -4,7 +4,7 @@ const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../sequelize');
 
 const SELECT_FIELDS =
-  'id_asignacion, id_ganado, id_potrero, fecha_desde, fecha_hasta, estado, created_at, updated_at';
+  'id_asignacion, id_ganado, id_potrero, fecha_desde, fecha_hasta, estado, created_at, updated_at, dmi_ingreso_kg_dia';
 
 async function getAsignacionById(id, transaction) {
   const rows = await sequelize.query(`SELECT ${SELECT_FIELDS} FROM \`asignacion_ganado\` WHERE id_asignacion = :id`, {
@@ -119,12 +119,12 @@ async function countGanadoHistoricoByPotrero(id_potrero, transaction) {
   return Number(rows[0].total);
 }
 
-async function crearAsignacion({ id_ganado, id_potrero, fecha_desde, estado }, transaction) {
+async function crearAsignacion({ id_ganado, id_potrero, fecha_desde, estado, dmi_ingreso_kg_dia = null }, transaction) {
   const [insertId] = await sequelize.query(
-    `INSERT INTO \`asignacion_ganado\` (id_ganado, id_potrero, fecha_desde, estado, created_at, updated_at)
-     VALUES (:id_ganado, :id_potrero, :fecha_desde, :estado, NOW(), NOW())`,
+    `INSERT INTO \`asignacion_ganado\` (id_ganado, id_potrero, fecha_desde, estado, created_at, updated_at, dmi_ingreso_kg_dia)
+     VALUES (:id_ganado, :id_potrero, :fecha_desde, :estado, NOW(), NOW(), :dmi_ingreso_kg_dia)`,
     {
-      replacements: { id_ganado, id_potrero, fecha_desde, estado },
+      replacements: { id_ganado, id_potrero, fecha_desde, estado, dmi_ingreso_kg_dia },
       type: QueryTypes.INSERT,
       transaction,
     }

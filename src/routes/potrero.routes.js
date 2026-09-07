@@ -22,6 +22,8 @@ router.delete('/:potreroId', potreroController.remove);
 
 // #18, #22
 router.post('/:potreroId/ganado', ganadoController.createEnPotrero);
+// Ruta versionada: un backend anterior devuelve 404 sin registrar animales ni ignorar los días.
+router.post('/:potreroId/ganado-con-ingreso', ganadoController.createEnPotrero);
 router.get('/:potreroId/ganado', ganadoController.listByPotrero);
 
 // #26, #27, #28

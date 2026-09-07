@@ -5,7 +5,11 @@ const { testConnection } = require('./database/sequelize');
 const PORT = process.env.PORT || 3000;
 
 testConnection()
-  .then(() => {
+  .then(async () => {
+    // Cambio aditivo e idempotente, antes de atender altas y balances.
+    await require('./database/migrations/20260907000001-asignacion-dmi-ingreso').up(
+      require('./database/sequelize').sequelize.getQueryInterface(), require('sequelize'));
+    console.log('Schema ready: dmi_ingreso_kg_dia');
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       if (process.env.STOCK_DAILY_SCHEDULER_ENABLED === 'true') {
@@ -13,6 +17,7 @@ testConnection()
       }
     });
   })
-  .catch(() => {
+  .catch(error => {
+    console.error('Backend startup failed:', error.message);
     process.exit(1);
   });

@@ -21,6 +21,7 @@ const AsignacionGanado = sequelize.define(
       type: DataTypes.DATEONLY,
       allowNull: false,
     },
+    dmi_ingreso_kg_dia: { type: DataTypes.DECIMAL(12,4), allowNull: true },
     // NULL = asignación vigente. La unicidad de "una sola asignación
     // activa por animal" se aplica en la base (columna generada +
     // índice único, ver migración 20260801000004).

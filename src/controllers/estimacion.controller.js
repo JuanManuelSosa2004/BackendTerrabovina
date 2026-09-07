@@ -247,8 +247,13 @@ async function crearEstimacionStock(req, res) {
   return res.status(202).json(iniciarStock(id_potrero, fecha));
 }
 
-function iniciarStock(id_potrero, fecha = fechaLocalActual()) {
+function iniciarStock(id_potrero, fecha = fechaLocalActual(), refreshDmi = false) {
   return require('../services/stockJobs').start(id_potrero, async () => {
+  if (refreshDmi) {
+    let status = 200, body;
+    await crearEstimacionNutricional({potrero:{id_potrero}}, {status(code){status=code;return this;},json(value){body=value;return this;}});
+    if (status >= 400) throw Error(`Ganado guardado; no se pudo actualizar DMI/stock: ${body?.error ?? status}`);
+  }
   const [potrero, dmi] = await Promise.all([
     potreroRepository.getPotreroById(id_potrero),
     estimacionDemandaRepository.getUltimaByPotrero(id_potrero),
@@ -266,7 +271,7 @@ function iniciarStock(id_potrero, fecha = fechaLocalActual()) {
       estimacionStockRepository.crear(stockPersistible(id_potrero, dmi, resultado), transaction)
     );
     return { ...estimacion, demanda_utilizada: dmi };
-  });
+  }, refreshDmi);
 }
 
 function estadoTareaStock(req, res) {
@@ -288,6 +293,7 @@ async function historicoStock(req, res) {
 }
 
 module.exports = {
+  aAnimalDelModelo,
   iniciarStock,
   estadoTareaStock,
   crearEstimacionForrajera,
