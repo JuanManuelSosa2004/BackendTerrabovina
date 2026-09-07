@@ -13,6 +13,12 @@ const { requireEstanciaOwnership } = require('../middlewares/ownership.middlewar
 
 const router = express.Router();
 router.use(requireAuth);
+// Must precede /:estanciaId. Preview does not create or modify an estancia.
+router.post('/validar-limite', require('../controllers/estanciaBoundary.controller').createBoundaryPreview({
+  sequelize: require('../database/sequelize').sequelize,
+  QueryTypes: require('sequelize').QueryTypes,
+  assertValidPolygon: require('../database/sql/geometry.repository').assertValidPolygon,
+}));
 
 // #7, #8
 router.post('/', estanciaController.create);
