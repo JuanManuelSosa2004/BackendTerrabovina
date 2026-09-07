@@ -2,9 +2,25 @@
 const http = require('node:http');
 const https = require('node:https');
 
+// Flask comparte sus hilos entre Stock y DMI. Serializar los cálculos largos
+// por servidor deja capacidad para registrar ganado y recalcular su demanda.
+// La espera en cola no consume el plazo de ejecución de la petición.
+const stockQueues = new Map();
+function postStockJson(url, body, timeoutMs) {
+  const key = new URL(url).origin;
+  const previous = stockQueues.get(key) ?? Promise.resolve();
+  const result = previous.then(() => sendStockJson(url, body, timeoutMs));
+  const settled = result.then(() => {}, () => {});
+  stockQueues.set(key, settled);
+  settled.then(() => {
+    if (stockQueues.get(key) === settled) stockQueues.delete(key);
+  });
+  return result;
+}
+
 // Una única fecha límite cubre conexión, cabeceras y cuerpo completo.
 // No usa fetch: su plazo interno de cabeceras puede cortar el cálculo a los 5 min.
-function postStockJson(url, body, timeoutMs) {
+function sendStockJson(url, body, timeoutMs) {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
     const transport = target.protocol === 'https:' ? https : target.protocol === 'http:' ? http : null;
