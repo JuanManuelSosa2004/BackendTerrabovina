@@ -104,17 +104,35 @@ async function getAnaliticasConsumo(id_estancia) {
   }));
 
   const evolucionStock7diasRaw = await sequelize.query(
-    `SELECT DATE(es.fecha_calculo) AS fecha,
-            AVG(es.stock_final_central_kg_ms_ha) AS stock_kg_ms_ha_promedio
-     FROM estimacion_stock es
-     JOIN potrero p ON p.id_potrero = es.id_potrero
-     WHERE p.id_estancia = :id_estancia AND p.activo = TRUE
-       AND es.fecha_calculo >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-     GROUP BY DATE(es.fecha_calculo) ORDER BY fecha ASC`,
+    `WITH ultimos AS (
+       SELECT es.*, ROW_NUMBER() OVER (
+         PARTITION BY es.id_potrero, es.fecha_objetivo
+         ORDER BY es.fecha_calculo DESC, es.id_estimacion_stock DESC
+       ) AS rn
+       FROM estimacion_stock es
+       JOIN potrero p ON p.id_potrero = es.id_potrero
+       WHERE p.id_estancia = :id_estancia AND p.activo = TRUE
+         AND es.fecha_objetivo BETWEEN
+           DATE_SUB(DATE(UTC_TIMESTAMP() - INTERVAL 3 HOUR), INTERVAL 6 DAY)
+           AND DATE(UTC_TIMESTAMP() - INTERVAL 3 HOUR)
+     )
+     SELECT fecha_objetivo AS fecha,
+            SUM(stock_final_total_kg_ms) AS stock_total_kg_ms,
+            AVG(stock_final_central_kg_ms_ha) AS stock_kg_ms_ha_promedio,
+            COUNT(*) AS potreros_con_datos,
+            (SELECT COUNT(*) FROM potrero
+             WHERE id_estancia = :id_estancia AND activo = TRUE) AS potreros_activos
+     FROM ultimos
+     WHERE rn = 1 AND stock_final_total_kg_ms IS NOT NULL
+     GROUP BY fecha_objetivo ORDER BY fecha_objetivo ASC`,
     { replacements: { id_estancia }, type: QueryTypes.SELECT }
   );
   const evolucionStock7dias = evolucionStock7diasRaw.map((row) => ({
     fecha: row.fecha,
+    stock_total_kg_ms: Number(Number(row.stock_total_kg_ms).toFixed(2)),
+    potreros_con_datos: Number(row.potreros_con_datos),
+    potreros_activos: Number(row.potreros_activos),
+    completo: Number(row.potreros_con_datos) === Number(row.potreros_activos),
     stock_kg_ms_ha_promedio: Number(Number(row.stock_kg_ms_ha_promedio).toFixed(2)),
   }));
 
