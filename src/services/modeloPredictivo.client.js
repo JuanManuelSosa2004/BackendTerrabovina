@@ -40,29 +40,28 @@ async function postJson(path, body, timeoutMs = TIMEOUT_MS) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  let response;
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
+    const response = await fetch(`${BASE_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new ModeloPredictivoError(
+        `El modelo predictivo respondió ${response.status} en ${path}.${text ? ` ${text}` : ''}`,
+        { status: response.status, detail: text }
+      );
+    }
+    try { return JSON.parse(text); }
+    catch (cause) { throw new ModeloPredictivoError(`El modelo devolvió JSON inválido en ${path}.`, { cause }); }
   } catch (error) {
-    throw new ModeloPredictivoError(`No se pudo contactar al modelo predictivo (${path}).`, { cause: error });
+    if (error instanceof ModeloPredictivoError) throw error;
+    throw new ModeloPredictivoError(`No se pudo completar la respuesta del modelo predictivo (${path}).`, { cause: error });
   } finally {
     clearTimeout(timeout);
   }
-
-  if (!response.ok) {
-    const detalle = await response.text().catch(() => '');
-    throw new ModeloPredictivoError(
-      `El modelo predictivo respondió ${response.status} en ${path}.${detalle ? ` ${detalle}` : ''}`,
-      { status: response.status, detail: detalle }
-    );
-  }
-
-  return response.json();
 }
 
 /**

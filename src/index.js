@@ -9,6 +9,10 @@ testConnection()
     // Cambio aditivo e idempotente, antes de atender altas y balances.
     await require('./database/migrations/20260907000001-asignacion-dmi-ingreso').up(
       require('./database/sequelize').sequelize.getQueryInterface(), require('sequelize'));
+    await require('./database/sequelize').sequelize.query(
+      'INSERT IGNORE INTO `SequelizeMeta` (`name`) VALUES (:name)',
+      { replacements: { name: '20260907000001-asignacion-dmi-ingreso.js' } }
+    );
     console.log('Schema ready: dmi_ingreso_kg_dia');
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

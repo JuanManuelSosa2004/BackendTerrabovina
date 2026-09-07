@@ -57,6 +57,12 @@ app.get('/health', (req, res) => {
 // en la página de error HTML por defecto de Express.
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'El cuerpo debe contener JSON válido.' });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'El cuerpo de la solicitud supera el tamaño permitido.' });
+  }
   console.error(err);
   res.status(500).json({ error: 'Error interno del servidor.' });
 });
