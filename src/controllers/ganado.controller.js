@@ -205,7 +205,7 @@ async function remove(req, res) {
   await sequelize.transaction(async (t) => {
     const asignacionActiva = await asignacionGanadoRepository.getAsignacionActivaByGanado(id_ganado, t);
     if (asignacionActiva) {
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = require('../utils/diasPrevios').fechaIngreso();
       await asignacionGanadoRepository.cerrarAsignacion(asignacionActiva.id_asignacion, hoy, 'FINALIZADA', t);
     }
     await ganadoRepository.darDeBaja(id_ganado, t);
@@ -312,7 +312,7 @@ async function removeMultiple(req, res) {
         throw err;
       }
 
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = require('../utils/diasPrevios').fechaIngreso();
       for (const id_ganado of idsGanado) {
         const asignacionActiva = await asignacionGanadoRepository.getAsignacionActivaByGanado(id_ganado, t);
         if (asignacionActiva) {

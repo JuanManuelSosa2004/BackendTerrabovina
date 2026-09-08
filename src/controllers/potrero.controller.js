@@ -127,7 +127,7 @@ async function remove(req, res) {
   }
 
   await sequelize.transaction(async (t) => {
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = require('../utils/diasPrevios').fechaIngreso();
     await asignacionGanadoRepository.cerrarAsignacionesActivasDePotrero(id_potrero, hoy, 'FINALIZADA', t);
     await potreroRepository.updatePotrero(id_potrero, { activo: false }, t);
   });

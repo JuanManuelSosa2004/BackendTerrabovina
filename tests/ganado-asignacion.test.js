@@ -292,6 +292,20 @@ describe('Ganado', () => {
     const listado = await authA(request(app).get(`/api/v2/estancia/${estanciaId}/ganado`));
     expect(listado.body.find((g) => g.id_ganado === ganadoId)).toBeUndefined();
   });
+
+  test.each(['individual', 'lote'])('la baja %s cierra la asignación en el día argentino', async (tipo) => {
+    const alta = await authA(request(app).post(`/api/v2/potrero/${potreroId}/ganado`)).send({
+      numero_identificacion: `FECHA-BAJA-${tipo}`, sexo: 'M', categoria: 'NOVILLO', peso_kg: 250,
+    });
+    expect(alta.status).toBe(201);
+    const id = alta.body.id_ganado;
+    const baja = tipo === 'individual'
+      ? await authA(request(app).delete(`/api/v2/ganado/${id}`))
+      : await authA(request(app).post('/api/v2/ganado/baja')).send({ id_ganado: [id] });
+    expect(baja.status).toBe(200);
+    const [closed] = await sequelize.query('SELECT fecha_hasta FROM asignacion_ganado WHERE id_ganado = ? ORDER BY id_asignacion DESC LIMIT 1', { replacements: [id] });
+    expect(closed[0].fecha_hasta).toBe(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date()));
+  });
 });
 
 describe('Validación de datos que necesita DMI', () => {
@@ -509,5 +523,7 @@ describe('Potrero - baja lógica y desvinculación de ganado', () => {
     const potreroRes = await authA(request(app).get(`/api/v2/potrero/${potreroBajaId}`));
     expect(potreroRes.status).toBe(200);
     expect(potreroRes.body.activo).toBe(0);
+    const [closed] = await sequelize.query('SELECT fecha_hasta FROM asignacion_ganado WHERE id_ganado = ? ORDER BY id_asignacion DESC LIMIT 1', { replacements: [ganadoLigadoId] });
+    expect(closed[0].fecha_hasta).toBe(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date()));
   });
 });

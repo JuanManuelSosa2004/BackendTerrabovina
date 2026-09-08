@@ -262,6 +262,8 @@ describe('DELETE /api/v2/estancia/:id', () => {
     const getGanado = await auth(request(app).get(`/api/v2/ganado/${ganado.body.id_ganado}`), token);
     expect(getGanado.status).toBe(200);
     expect(getGanado.body.activo).toBeFalsy();
+    const [closed] = await sequelize.query('SELECT fecha_hasta FROM asignacion_ganado WHERE id_ganado = ? ORDER BY id_asignacion DESC LIMIT 1', { replacements: [ganado.body.id_ganado] });
+    expect(closed[0].fecha_hasta).toBe(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date()));
 
     // Con la estancia dada de baja, el usuario vuelve a estar "sin estancia".
     const getMine = await auth(request(app).get('/api/v2/estancia'), token);
