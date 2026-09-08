@@ -47,7 +47,7 @@ async function crear(req, res) {
       }
 
       const resultados = [];
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = require('../utils/diasPrevios').fechaIngreso();
 
       for (const id_ganado of idsGanado) {
         const ganado = await getGanadoDeEstancia(id_ganado, potrero.id_estancia, t);

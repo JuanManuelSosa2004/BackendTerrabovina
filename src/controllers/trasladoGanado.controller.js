@@ -35,7 +35,10 @@ async function getGanadoConAsignacionActivaEnPotrero(id_ganado, id_estancia, id_
 }
 
 function fechaSolo(fecha) {
-  return new Date(fecha).toISOString().slice(0, 10);
+  // Una fecha sin hora ya representa un día calendario. Los instantes ISO
+  // del navegador se convierten al mismo día argentino que usa Stock.
+  if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) return fecha;
+  return require('../utils/diasPrevios').fechaIngreso(0, new Date(fecha));
 }
 
 // #1: traslada un lote de animales de un potrero a otro, cerrando cada
@@ -89,7 +92,7 @@ async function crear(req, res) {
         t
       );
 
-      const fechaMovimiento = fechaSolo(fechaMovimientoDate);
+      const fechaMovimiento = fechaSolo(fecha_movimiento);
 
       for (const id_ganado of idsGanado) {
         const ganado = await getGanadoConAsignacionActivaEnPotrero(id_ganado, id_estancia, id_potrero_origen, t);

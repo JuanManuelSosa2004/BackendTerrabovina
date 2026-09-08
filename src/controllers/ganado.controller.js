@@ -34,8 +34,11 @@ function validarCamposGanado(body, { requiereNumeroIdentificacion = true } = {})
       ? 'numero_identificacion, sexo, categoria y peso_kg son obligatorios.'
       : 'sexo, categoria y peso_kg son obligatorios.';
   }
-  if (categoria === 'VACA' && condicion_corporal === undefined) {
-    return 'condicion_corporal es obligatoria para categoria VACA.';
+  if (categoria === 'VACA' &&
+      (!['number','string'].includes(typeof condicion_corporal) ||
+       (typeof condicion_corporal === 'string' && !condicion_corporal.trim()) ||
+       !Number.isFinite(Number(condicion_corporal)) || Number(condicion_corporal) < 1 || Number(condicion_corporal) > 5)) {
+    return 'condicion_corporal es obligatoria para categoria VACA y debe estar entre 1 y 5.';
   }
   return validarSexoParaCategoria(categoria, sexo) ?? validarPesoParaCategoria(categoria, peso_kg);
 }
@@ -175,12 +178,9 @@ async function update(req, res) {
     return res.status(400).json({ error: 'No hay campos para actualizar.' });
   }
 
-  if (fields.categoria !== undefined || fields.peso_kg !== undefined || fields.sexo !== undefined) {
+  if (['categoria','peso_kg','sexo','condicion_corporal'].some(key => fields[key] !== undefined)) {
     const actual = await ganadoRepository.getGanadoById(req.ganado.id_ganado);
-    const categoria = fields.categoria ?? actual.categoria;
-    const errorValidacion =
-      validarSexoParaCategoria(categoria, fields.sexo ?? actual.sexo) ??
-      validarPesoParaCategoria(categoria, fields.peso_kg ?? actual.peso_kg);
+    const errorValidacion = validarCamposGanado({ ...actual, ...fields }, { requiereNumeroIdentificacion:false });
     if (errorValidacion) {
       return res.status(400).json({ error: errorValidacion });
     }
@@ -253,12 +253,9 @@ async function updateMultiple(req, res) {
       }
 
       for (const [id_ganado, fields] of fieldsById) {
-        if (fields.categoria === undefined && fields.peso_kg === undefined && fields.sexo === undefined) continue;
+        if (!['categoria','peso_kg','sexo','condicion_corporal'].some(key => fields[key] !== undefined)) continue;
         const actual = await ganadoRepository.getGanadoById(id_ganado, t);
-        const categoria = fields.categoria ?? actual.categoria;
-        const errorValidacion =
-          validarSexoParaCategoria(categoria, fields.sexo ?? actual.sexo) ??
-          validarPesoParaCategoria(categoria, fields.peso_kg ?? actual.peso_kg);
+        const errorValidacion = validarCamposGanado({ ...actual, ...fields }, { requiereNumeroIdentificacion:false });
         if (errorValidacion) {
           const err = new Error(`Animal ${id_ganado}: ${errorValidacion}`);
           err.status = 400;

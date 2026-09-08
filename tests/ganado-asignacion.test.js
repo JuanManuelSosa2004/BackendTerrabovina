@@ -294,6 +294,48 @@ describe('Ganado', () => {
   });
 });
 
+describe('Validación de datos que necesita DMI', () => {
+  let primero, segundo;
+  beforeAll(async () => {
+    const crear = numero_identificacion => authA(request(app).post(`/api/v2/estancia/${estanciaId}/ganado`))
+      .send({numero_identificacion,sexo:'F',categoria:'VACA',peso_kg:430,condicion_corporal:3});
+    primero = (await crear('VALIDACION-DMI-A')).body.id_ganado;
+    segundo = (await crear('VALIDACION-DMI-B')).body.id_ganado;
+  });
+
+  test.each([0,-1,null,true,'NaN',0.001,10000])('rechaza peso inválido %p en alta y edición', async peso_kg => {
+    const alta = await authA(request(app).post(`/api/v2/estancia/${estanciaId}/ganado`))
+      .send({numero_identificacion:'PESO-INVALIDO',sexo:'M',categoria:'NOVILLO',peso_kg});
+    expect(alta.status).toBe(400);
+    const edit = await authA(request(app).patch(`/api/v2/ganado/${primero}`)).send({peso_kg});
+    expect(edit.status).toBe(400);
+    const actual = await authA(request(app).get(`/api/v2/ganado/${primero}`));
+    expect(Number(actual.body.peso_kg)).toBe(430);
+  });
+
+  test.each([null,'',0,6,true,'NaN'])('rechaza condición corporal inválida %p al editar una vaca', async condicion_corporal => {
+    const edit = await authA(request(app).patch(`/api/v2/ganado/${primero}`)).send({condicion_corporal});
+    expect(edit.status).toBe(400);
+    const actual = await authA(request(app).get(`/api/v2/ganado/${primero}`));
+    expect(Number(actual.body.condicion_corporal)).toBe(3);
+  });
+
+  test('un cambio masivo inválido no guarda la primera modificación válida', async () => {
+    const res = await authA(request(app).patch('/api/v2/ganado')).send({ganado:[
+      {id_ganado:primero,peso_kg:450}, {id_ganado:segundo,condicion_corporal:null},
+    ]});
+    expect(res.status).toBe(400);
+    const actual = await authA(request(app).get(`/api/v2/ganado/${primero}`));
+    expect(Number(actual.body.peso_kg)).toBe(430);
+  });
+
+  test('sigue admitiendo un peso positivo fuera del rango observado del modelo', async () => {
+    const res = await authA(request(app).patch(`/api/v2/ganado/${segundo}`)).send({peso_kg:700});
+    expect(res.status).toBe(200);
+    expect(Number(res.body.peso_kg)).toBe(700);
+  });
+});
+
 describe('Asignación de ganado', () => {
   let ganadoAId;
   let ganadoBId;

@@ -15,12 +15,14 @@ const WEIGHT_RANGE_BY_CATEGORY = {
 
 const WEIGHT_RANGE_TOLERANCE_KG = 5;
 
-// Devuelve un mensaje de error si peso_kg queda fuera del rango de la
-// categoría (+/- tolerancia), o null si es válido. No valida tipo/formato
-// de peso_kg ni categorías desconocidas: eso ya lo cubre el resto de
-// validarCamposGanado / el enum de la base.
-// No rechaza pesos fuera de rango para permitir flexibilidad en el ingreso de datos
+// Los rangos observados del modelo son orientativos: se permiten pesos
+// fuera de ellos, pero deben ser positivos y representables en DECIMAL(6,2).
 function validarPesoParaCategoria(categoria, peso_kg) {
+  if (!['number','string'].includes(typeof peso_kg) ||
+      (typeof peso_kg === 'string' && !peso_kg.trim()) ||
+      !Number.isFinite(Number(peso_kg)) || Number(peso_kg) < 0.01 || Number(peso_kg) > 9999.99) {
+    return 'peso_kg debe ser un número positivo entre 0.01 y 9999.99.';
+  }
   return null;
 }
 

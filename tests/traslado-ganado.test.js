@@ -174,6 +174,37 @@ describe('POST /api/v2/potrero/:potreroId/traslado-ganado', () => {
     expect(res.status).toBe(401);
   });
 
+  test.each([
+    ['2026-09-08T01:30:00.000Z', '2026-09-07'],
+    ['2026-09-08T03:30:00.000Z', '2026-09-08'],
+    ['2026-09-08', '2026-09-08'],
+  ])('el traslado %s conserva el día operativo %s', async (fecha, esperado) => {
+    const ganado = await crearGanadoEnPotrero(token, potreroOrigenId);
+    const res = await crearTraslado(token, potreroOrigenId, {
+      id_potrero_destino: potreroDestinoId,
+      id_ganado: [ganado.id_ganado],
+      fecha_movimiento: fecha,
+    });
+    expect(res.status).toBe(201);
+    const [asignaciones] = await sequelize.query(
+      'SELECT fecha_desde,fecha_hasta FROM asignacion_ganado WHERE id_ganado=? ORDER BY id_asignacion',
+      { replacements:[ganado.id_ganado] }
+    );
+    expect(asignaciones[0].fecha_hasta).toBe(esperado);
+    expect(asignaciones[1].fecha_desde).toBe(esperado);
+  });
+
+  test('la primera asignación usa el día actual argentino', async () => {
+    const ganado = await crearGanadoSinPotrero(token, id_estancia);
+    const esperado = new Intl.DateTimeFormat('en-CA', {
+      timeZone:'America/Argentina/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit',
+    }).format(new Date());
+    const res = await authHeader(request(app).post('/api/v2/asignacion-ganado'), token)
+      .send({ id_potrero:potreroOrigenId,id_ganado:[ganado.id_ganado] });
+    expect(res.status).toBe(201);
+    expect(res.body[0].fecha_desde).toBe(esperado);
+  });
+
   test('traslada un único animal: cierra la asignación origen y crea exactamente una activa en destino', async () => {
     const ganado = await crearGanadoEnPotrero(token, potreroOrigenId);
 
