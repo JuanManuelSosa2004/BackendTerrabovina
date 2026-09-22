@@ -4,6 +4,7 @@ const express = require('express');
 const potreroController = require('../controllers/potrero.controller');
 const ganadoController = require('../controllers/ganado.controller');
 const ndviClimaController = require('../controllers/ndviClima.controller');
+const intrapotreroController = require('../controllers/intrapotrero.controller');
 const estimacionController = require('../controllers/estimacion.controller');
 const recomendacionController = require('../controllers/recomendacion.controller');
 const trasladoGanadoController = require('../controllers/trasladoGanado.controller');
@@ -29,6 +30,8 @@ router.get('/:potreroId/ganado', ganadoController.listByPotrero);
 
 // #26, #27, #28
 router.get('/:potreroId/ndvi', ndviClimaController.getNdviVigente);
+router.get('/:potreroId/intrapotrero', intrapotreroController.get);
+router.post('/:potreroId/intrapotrero', intrapotreroController.refresh);
 router.get('/:potreroId/ndvi/consulta-rango', ndviClimaController.getNdviHistorico);
 router.get('/:potreroId/dato-clima', ndviClimaController.getDatoClimaVigente);
 
