@@ -1,7 +1,7 @@
 'use strict';
 const DAY = 86400000;
 const KEYS = ['min', 'central', 'max'];
-const VERSION = 'balance_diario_asignaciones_v3';
+const VERSION = 'balance_diario_ambientes_v4';
 const dayMs = d => Date.parse(String(d).slice(0, 10) + 'T00:00:00-03:00');
 const dateOf = ms => new Date(ms - 3 * 3600000).toISOString().slice(0, 10);
 const nextDay = (d, n = 1) => dateOf(dayMs(d) + n * DAY);
@@ -77,11 +77,11 @@ function rowsFromCalculation(result) {
   })));
 }
 
-async function calculateDaily({ potrero, fecha, previous, assignments, estimates, predict }) {
+async function calculateDaily({ potrero, fecha, previous, assignments, estimates, predict, revisions=[] }) {
   const old = previous?.detalle_json;
   const geom = JSON.stringify(potrero.geom);
   let result, ledger, observations, refreshed;
-  const valid = old?.metodologia === VERSION && old.seguimiento_diario?.geometria === geom;
+  const valid = [VERSION,'balance_diario_asignaciones_v3'].includes(old?.metodologia) && old.seguimiento_diario?.geometria === geom;
   if (!valid) {
     result = await predict({ nombre_potrero:potrero.nombre, geojson:potrero.geom, fecha, consumo_diario_total_kg_ms:0 });
     ledger = rowsFromCalculation(result);
@@ -106,13 +106,14 @@ async function calculateDaily({ potrero, fecha, previous, assignments, estimates
     }
     for (let day = nextDay(ledger.at(-1).fecha); day <= fecha; day = nextDay(day)) {
       const last = ledger.at(-1);
-      ledger.push({fecha:day,bruto:{...last.bruto},utilizable:{...last.utilizable},provisional:true,fecha_tasa:last.fecha_tasa});
+      ledger.push({fecha:day,bruto:{...(last.base_bruto??last.bruto)},utilizable:{...(last.base_utilizable??last.utilizable)},provisional:true,fecha_tasa:last.fecha_tasa});
     }
   }
   const area = Number(result.potrero.superficie_ha);
   const production = Object.fromEntries(KEYS.map(k=>[k,0]));
   let consumption = 0;
   for (const row of ledger) {
+    require('./intrapotrero.service').applyEnvironments(row,revisions,potrero.geom);
     row.consumo = consumptionForDay(row.fecha,assignments,estimates);
     consumption += row.consumo.kg_ms/area;
     for (const k of KEYS) production[k] += row.utilizable[k];
@@ -122,6 +123,10 @@ async function calculateDaily({ potrero, fecha, previous, assignments, estimates
   const final = ledger.at(-1);
   const lastConsumption = final.consumo.kg_ms;
   result.metodologia = VERSION;
+  result.intrapotrero = {version:final.intrapotrero.version,
+    versiones:revisions.map(r=>({id:r.id,vigente_desde:r.vigente_desde,matriz:r.analisis.matriz_version})),
+    metodo:'Referencia mensual ponderada por superficie desde fecha de registro; anomalía DMP común al potrero.',
+    nota:'Accesibilidad y preferencia se informan por separado; no descuentan dos veces el stock ni el consumo.'};
   result.potrero.fecha_objetivo = fecha;
   result.potrero.dias_calculo = ledger.length;
   result.generado_en = new Date().toISOString();

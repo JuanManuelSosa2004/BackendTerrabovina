@@ -263,8 +263,9 @@ function iniciarStock(id_potrero, fecha = fechaLocalActual(), refreshDmi = false
       require('../database/sql/asignacionGanado.repository').getHistorialByPotrero(id_potrero),
       estimacionDemandaRepository.getHistoricoByPotrero(id_potrero),
     ]);
+    const revisions = await require('../database/sql/intrapotrero.repository').history(id_potrero);
     const resultado = await require('../services/stockDaily.service').calculateDaily({
-      potrero, fecha, previous, assignments, estimates, predict: predictStock,
+      potrero, fecha, previous, assignments, estimates, predict: predictStock, revisions,
     });
     const estimacion = await sequelize.transaction(transaction =>
       estimacionStockRepository.crear(stockPersistible(id_potrero, dmi, resultado), transaction)

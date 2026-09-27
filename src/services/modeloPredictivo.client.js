@@ -114,4 +114,5 @@ async function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms,
   catch (cause) { throw new ModeloPredictivoError('Flask devolvió una respuesta de Stock que no es JSON válido.', {cause}); }
 }
 
-module.exports = { predictDmp, predictDmi, predictStock, ModeloPredictivoError };
+function analyzeIntrapaddock(input) { return postJson('/intrapotrero/analizar', input, 45000); }
+module.exports = { predictDmp, predictDmi, predictStock, analyzeIntrapaddock, ModeloPredictivoError };

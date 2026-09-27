@@ -14,6 +14,10 @@ const { requirePotreroOwnership } = require('../middlewares/ownership.middleware
 const router = express.Router();
 router.use(requireAuth);
 router.use('/:potreroId', requirePotreroOwnership());
+const intrapotrero = require('../controllers/intrapotrero.controller');
+router.get('/:potreroId/intrapotrero', intrapotrero.get);
+router.post('/:potreroId/intrapotrero', intrapotrero.save);
+router.get('/:potreroId/intrapotrero/historial', intrapotrero.history);
 
 // #14, #15, #16
 router.get('/:potreroId', potreroController.getById);

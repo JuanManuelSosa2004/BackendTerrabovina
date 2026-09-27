@@ -13,7 +13,7 @@ async function tick() {
       if (jobs.get(row.id_potrero).estado === 'EJECUTANDO') continue;
       const latest = await require('../database/sql/estimacionStock.repository').getUltimaByPotrero(row.id_potrero);
       // Solo continúa balances que el usuario ya inicializó con esta metodología.
-      if (latest?.version_metodologia !== require('./stockDaily.service').VERSION) continue;
+      if (![require('./stockDaily.service').VERSION,'balance_diario_asignaciones_v3'].includes(latest?.version_metodologia)) continue;
       const today = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
       if (String(latest.fecha_objetivo).slice(0,10) === today) continue;
       let status = 200;
