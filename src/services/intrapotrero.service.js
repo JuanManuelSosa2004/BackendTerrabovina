@@ -1,5 +1,9 @@
 'use strict';
 const KEYS=['min','central','max'];
+// Retired regional selectors stop affecting growth from this release date.
+// Earlier ledger days retain their saved factors for historical reproducibility.
+const REGIONAL_CURVES_RETIRED_FROM='2026-09-27';
+const ANALYSIS_VERSION='relieve_sin_curvas_v2';
 const sameGeometry=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 function revisionForDay(revisions,fecha,geom) {
   // Select latest revision first; do not revive an older version on boundary changes.
@@ -11,7 +15,7 @@ function applyEnvironments(row,revisions,geom) {
   row.base_utilizable ??= {...row.utilizable};
   const revision=revisionForDay(revisions,row.fecha,geom);
   const month=Number(row.fecha.slice(5,7))-1;
-  const factor=revision?.analisis.factor_mensual?.[month] ?? 1;
+  const factor=row.fecha>=REGIONAL_CURVES_RETIRED_FROM ? 1 : revision?.analisis.factor_mensual?.[month] ?? 1;
   if (!Number.isFinite(factor) || factor<0) throw Error('Factor ambiental inválido.');
   row.bruto=Object.fromEntries(KEYS.map(k=>[k,row.base_bruto[k]*factor]));
   row.utilizable=Object.fromEntries(KEYS.map(k=>[k,row.base_utilizable[k]*factor]));
@@ -27,7 +31,9 @@ function summarize(analysis,stock,animals=0,revisionId=null) {
   const stockTotal=Number(stock?.stock_final_total_kg_ms);
   const lastDay=stock?.detalle_json?.seguimiento_diario?.dias?.at(-1);
   const currentVersion=lastDay?.intrapotrero?.version??null;
-  const pending=revisionId!==currentVersion;
+  const retiredAdjustment=analysis.version===ANALYSIS_VERSION && analysis.fecha>=REGIONAL_CURVES_RETIRED_FROM
+    && lastDay?.intrapotrero?.factor!=null && lastDay.intrapotrero.factor!==1;
+  const pending=revisionId!==currentVersion || retiredAdjustment;
   const ratio=analysis.referencia_ponderada_mensual[month]>0
     ? analysis.referencia_accesible_mensual[month]/analysis.referencia_ponderada_mensual[month] : share;
   const valid=stock && stock.fecha_objetivo===analysis.fecha && !pending;
@@ -40,6 +46,6 @@ function summarize(analysis,stock,animals=0,revisionId=null) {
     stock_accesible_proxy_kg_ms:valid&&Number.isFinite(stockTotal)?stockTotal*share:null,
     stock_fecha:stock?.fecha_objetivo??null,pendiente_actualizar:!valid,
     nota_stock_accesible:'Aproximación por superficie accesible: supone distribución uniforme del saldo. No mide biomasa por zona ni modifica el stock total.',
-    nota_crecimiento:'Anomalía satelital común al potrero; referencia mensual ponderada por ambientes.'};
+    nota_crecimiento:'Crecimiento base del potrero sin ajustes por relieve ni tipos de pastizal. La accesibilidad se estima por superficie.'};
 }
 module.exports={sameGeometry,revisionForDay,applyEnvironments,summarize};

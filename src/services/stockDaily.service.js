@@ -125,7 +125,7 @@ async function calculateDaily({ potrero, fecha, previous, assignments, estimates
   result.metodologia = VERSION;
   result.intrapotrero = {version:final.intrapotrero.version,
     versiones:revisions.map(r=>({id:r.id,vigente_desde:r.vigente_desde,matriz:r.analisis.matriz_version})),
-    metodo:'Referencia mensual ponderada por superficie desde fecha de registro; anomalía DMP común al potrero.',
+    metodo:'Crecimiento base sin ajuste intrapotrero desde 2026-09-27. Se conservan los factores históricos anteriores; anomalía DMP común al potrero.',
     nota:'Accesibilidad y preferencia se informan por separado; no descuentan dos veces el stock ni el consumo.'};
   result.potrero.fecha_objetivo = fecha;
   result.potrero.dias_calculo = ledger.length;

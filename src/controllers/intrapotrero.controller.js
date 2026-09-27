@@ -51,7 +51,7 @@ async function save(req,res) {
   });
   if (!result) return res.status(409).json({error:'El potrero cambió en otra sesión. Recargá antes de guardar.'});
   return res.status(201).json({version:result.id,vigente_desde:result.vigente_desde,guardado_en:result.created_at,
-    configuracion:result.configuracion,analisis:analysis,mensaje:'Zonas guardadas. Actualizá el stock para incorporar los ambientes desde hoy.'});
+    configuracion:result.configuracion,analisis:analysis,mensaje:'Zonas guardadas. Actualizá el balance para reflejar la superficie accesible. El relieve no ajusta el crecimiento.'});
 }
 async function history(req,res) {
   const versions=await repo.history(req.potrero.id_potrero);
