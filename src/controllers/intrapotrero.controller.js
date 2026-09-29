@@ -10,7 +10,7 @@ const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Bue
 function errorResponse(error,res) {
   if (error instanceof ModeloPredictivoError) {
     let detail; try {detail=JSON.parse(error.detail).error;} catch { /* non-JSON upstream */ }
-    return res.status(error.status===422?422:503).json({error:detail||'No se pudo consultar el análisis. La última versión guardada se conserva.'});
+    return res.status(error.status===422?422:503).json({error:detail||'No se pudo consultar el análisis. La configuración guardada se conserva.'});
   }
   throw error;
 }
@@ -28,7 +28,7 @@ async function get(req,res) {
     if (version && error instanceof ModeloPredictivoError) return res.json({version:version.id,configuracion:version.configuracion,
       analisis:version.analisis,guardado_en:version.created_at,vigente_desde:version.vigente_desde,
       limites_modificados:Boolean(changed),requiere_revision:true,sin_actualizar:true,
-      advertencia:'Servicio de análisis no disponible. Se muestra la última versión guardada con su fecha.'});
+      advertencia:'Servicio de análisis no disponible. Se muestra el último análisis guardado con su fecha.'});
     return errorResponse(error,res);
   }
 }
@@ -53,9 +53,4 @@ async function save(req,res) {
   return res.status(201).json({version:result.id,vigente_desde:result.vigente_desde,guardado_en:result.created_at,
     configuracion:result.configuracion,analisis:analysis,mensaje:'Zonas guardadas. Actualizá el balance para reflejar la superficie accesible. El relieve no ajusta el crecimiento.'});
 }
-async function history(req,res) {
-  const versions=await repo.history(req.potrero.id_potrero);
-  return res.json({versiones:versions.map(v=>({id:v.id,vigente_desde:v.vigente_desde,created_at:v.created_at,
-    cantidad_zonas:v.configuracion.zonas.length,configuracion:v.configuracion}))});
-}
-module.exports={get,save,history};
+module.exports={get,save};
