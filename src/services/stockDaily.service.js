@@ -74,6 +74,7 @@ function rowsFromCalculation(result) {
     utilizable: Object.fromEntries(KEYS.map(k => [k,ref['referencia_'+k]*p.factor_dmp_aplicado*factor])),
     provisional: false,
     fecha_tasa: p.fecha_fin,
+    traza_crecimiento: require('./growthComparison.service').growthTrace(p,ref),
   })));
 }
 
@@ -106,7 +107,8 @@ async function calculateDaily({ potrero, fecha, previous, assignments, estimates
     }
     for (let day = nextDay(ledger.at(-1).fecha); day <= fecha; day = nextDay(day)) {
       const last = ledger.at(-1);
-      ledger.push({fecha:day,bruto:{...(last.base_bruto??last.bruto)},utilizable:{...(last.base_utilizable??last.utilizable)},provisional:true,fecha_tasa:last.fecha_tasa});
+      ledger.push({fecha:day,bruto:{...(last.base_bruto??last.bruto)},utilizable:{...(last.base_utilizable??last.utilizable)},provisional:true,fecha_tasa:last.fecha_tasa,
+        ...(last.traza_crecimiento ? {traza_crecimiento:{...last.traza_crecimiento}} : {})});
     }
   }
   const area = Number(result.potrero.superficie_ha);

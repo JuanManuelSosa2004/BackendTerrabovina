@@ -1,0 +1,28 @@
+{
+  "version": "referencia_dmp_v1",
+  "alcance": "Misma explicación del cálculo vigente para NEA y Buenos Aires provincia. No incorpora una calibración climática nueva ni amplía las curvas regionales existentes.",
+  "formula_vigente": "crecimiento_bruto = referencia_regional_del_dia * factor_DMP_aplicado",
+  "factor_vigente": "DMP actual / mediana DMP histórica de la misma época; limitado actualmente entre 0.5 y 1.5 por configuración del proyecto.",
+  "comparacion": "(factor_aplicado - 1) * 100. Solo se muestra si referencia, factor y tasa guardada son coherentes; referencia cero no produce porcentaje.",
+  "periodos": "Se usa la referencia del día del balance. Si la tasa es provisional se conserva la referencia de la tasa proyectada, incluso entre meses. Nunca se compara contra el promedio de toda la ventana.",
+  "compatibilidad": "Los balances anteriores recuperan referencia y factor de sus observaciones DMP. Los nuevos guardan traza por día. Sin migración de base de datos.",
+  "sin_datos": "Conserva el crecimiento vigente y explica que falta una referencia trazable. No sustituye faltantes por cero ni aplica curvas de otra provincia.",
+  "stock": "La comparación es informativa. No cambia producción, consumo, stock ni estimación de acceso. El factor DMP ya estaba aplicado.",
+  "relieve": "Loma, media loma y bajo no aplican un porcentaje adicional. Lluvia acumulada y estado observado del suelo continúan como información separada.",
+  "limites": [
+    "Cobertura geográfica de una interfaz no equivale a cobertura de calibración ni precisión uniforme.",
+    "Las fuentes respaldan métodos y estudios locales, no validan este modelo entrenado ni todos sus parámetros en cada potrero.",
+    "Los límites 0.5–1.5 y el aprovechamiento del 50% son decisiones configuradas del proyecto; no deben atribuirse a los papers.",
+    "La matriz regional existente declara una compilación interna PFI 3.8. Falta auditar cada curva contra su publicación original y validar la transferencia geográfica.",
+    "Sin referencia regional compatible, la generación de una estimación nueva para cualquier potrero de las cinco provincias sigue pendiente. Esta entrega no inventa esa referencia."
+  ],
+  "bibliografia": [
+    {"titulo":"Grigera, Oesterheld y Pacín (2007). Monitoring forage production for farmers’ decision making", "url":"https://doi.org/10.1016/j.agsy.2007.01.001", "uso":"Fundamento del monitoreo forrajero mediante información satelital; no valida el predictor DMP específico de TerraBovina."},
+    {"titulo":"Observatorio Forrajero, LART–FAUBA", "url":"https://lart.agro.uba.ar/observatorio-forrajero/", "uso":"Referencia metodológica y fuente candidata de series para calibración. No integrado como API en esta entrega."},
+    {"titulo":"Leszczuk, FAUBA (2020)", "url":"https://ri.agro.uba.ar/files/download/tesis/especializacion/2022leszczukandresalejandro.pdf", "uso":"Relación local mensual clima-producción en cinco potreros naturales de INTA Mercedes; no se aplica su regresión a todo el NEA."},
+    {"titulo":"Fernández y colaboradores, UNLP (2022)", "url":"https://sedici.unlp.edu.ar/bitstream/handle/10915/150871/Documento_completo.pdf-PDFA.pdf?sequence=1", "uso":"Relación local y estacional entre precipitación y producción en Magdalena. No se aplica como coeficiente provincial."},
+    {"titulo":"INTA, Pastizales del Chaco Húmedo (2024)", "url":"https://www.argentina.gob.ar/node/423766", "uso":"Monitoreos por ambiente; no tabla universal de coeficientes de relieve."},
+    {"titulo":"INTA, Aportes a la sustentabilidad de la ganadería del NEA (2025)", "url":"https://repositorio.inta.gob.ar/handle/20.500.12123/23621", "uso":"Evidencia regional; separar pastizal natural de pasturas implantadas. No valida cobertura homogénea."},
+    {"titulo":"Di Bella y colaboradores (2016)", "url":"https://doi.org/10.17221/282/2014-SWR", "uso":"Relación entre posición topográfica y humedad del suelo en Pampa Deprimida, sin coeficientes universales de crecimiento."}
+  ]
+}

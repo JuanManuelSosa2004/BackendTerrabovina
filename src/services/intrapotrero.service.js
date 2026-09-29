@@ -45,6 +45,7 @@ function summarize(analysis,stock,animals=0,revisionId=null) {
     stock_estimado_total_kg_ms:stock&&Number.isFinite(stockTotal)?stockTotal:null,
     stock_accesible_proxy_kg_ms:valid&&Number.isFinite(stockTotal)?stockTotal*share:null,
     stock_fecha:stock?.fecha_objetivo??null,pendiente_actualizar:!valid,
+    comparacion_crecimiento:require('./growthComparison.service').compareGrowth(stock,valid),
     nota_stock_accesible:'Aproximación por superficie accesible: supone distribución uniforme del saldo. No mide biomasa por zona ni modifica el stock total.',
     nota_crecimiento:'Crecimiento base del potrero sin ajustes por relieve ni tipos de pastizal. La accesibilidad se estima por superficie.'};
 }
