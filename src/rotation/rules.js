@@ -45,9 +45,18 @@ function occupancy(p,assignments,start,declaredExit){
 }
 function infer(snapshot){
   const {config:c,paddocks,animals,assignments,start}=snapshot,issues=[],trace=[],units=[];
-  const ps=paddocks.map(p=>{
+  const considered=paddocks.filter(p=>{
+    const cfg=c.paddocks[p.id_potrero]??{};
+    const excludedAll=cfg.excluded_from&&cfg.excluded_from<=start&&(!cfg.excluded_until||cfg.excluded_until>=day(start,c.horizon-1));
+    if(excludedAll&&!animals.some(a=>a.origin===p.id_potrero)){
+      trace.push({paddock:p.id_potrero,date:start,rules:['EXCLUDED']});
+      return false;
+    }
+    return true;
+  });
+  const ps=considered.map(p=>{
     const cfg=c.paddocks[p.id_potrero]??{},occ=occupancy(p,assignments,start,cfg.last_exit);
-    for(const k of ['rest','max_stay','reserve_ha'])if(cfg[k]==null)issues.push(`${p.nombre}: falta ${k}.`);
+    for(const [k,label] of [['rest','descanso mínimo'],['max_stay','ocupación máxima'],['reserve_ha','reserva adicional']])if(cfg[k]==null)issues.push(`${p.nombre}: falta ${label}.`);
     if(!occ.known)issues.push(`${p.nombre}: falta historial o última salida declarada.`);
     if(!p.offer||p.offer.date!==start)issues.push(`${p.nombre}: falta oferta utilizable y crecimiento con fecha de hoy.`);
     if(cfg.water&&(!cfg.water_date||days(start,cfg.water_date)>7||cfg.water_date>start))issues.push(`${p.nombre}: reconfirmá agua y acceso (vigencia operativa 7 días).`);
@@ -87,7 +96,7 @@ function infer(snapshot){
   for(const a of animals.filter(a=>!seen.has(a.id_ganado)))add({id:'fixed_'+a.id_ganado,name:'Sin grupo · '+a.numero_identificacion,destinations:[],incompatible:[]},[a],true);
   if(!c.groups.some(g=>g.selected))issues.push('Seleccioná al menos un grupo para planificar.');
   if(units.length>80)issues.push('Demasiadas unidades: deshabilitá división o agrupá animales (máximo 80).');
-  if(paddocks.length>30)issues.push('Esta versión admite hasta 30 potreros activos por estancia.');
+  if(ps.length>30)issues.push('Esta versión admite hasta 30 potreros considerados; podés excluir potreros vacíos.');
   return {issues:[...new Set(issues)],trace,version:catalog.version,input:{start,horizon:c.horizon,paddocks:ps,units}};
 }
 module.exports={today,day,days,hash,animalHash,fail,number,validDate,validateConfig,occupancy,infer,catalog};

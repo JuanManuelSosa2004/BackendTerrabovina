@@ -8,6 +8,12 @@ test('whole groups and animal demand',()=>{const s=base(),r=R.infer(s);assert.de
 test('disabled group keeps demand and location',()=>{const s=base();s.config.groups[0].selected=false;const u=R.infer(s).input.units[0];assert.equal(u.fixed,true);assert.equal(u.demand,8);});
 test('exclusion inclusive and temporary',()=>{const s=base();Object.assign(s.config.paddocks[1],{excluded_from:'2026-10-01',excluded_until:'2026-10-02'});assert.deepEqual(R.infer(s).input.paddocks[0].available,[false,false,true]);});
 test('missing offer blocks plan',()=>{const s=base();s.paddocks[0].offer=null;assert.ok(R.infer(s).issues.some(x=>x.includes('oferta')));});
+test('empty paddock excluded for the entire horizon needs no invented forage or rules',()=>{
+ const s=base();s.paddocks.push({id_potrero:2,nombre:'Excluido',superficie_ha:10,offer:null});
+ s.config.paddocks[2]={water:false,excluded_from:'2026-10-01',reason:'Mantenimiento'};
+ const r=R.infer(s);assert.deepEqual(r.issues,[]);assert.deepEqual(r.input.paddocks.map(p=>p.id),[1]);
+ s.config.paddocks[2].excluded_until='2026-10-02';assert.ok(R.infer(s).issues.some(x=>x.startsWith('Excluido:')));
+});
 test('changed weight invalidates demand',()=>{const s=base();s.animals[0].peso_kg='350';assert.ok(R.infer(s).issues.some(x=>x.includes('DMI')));});
 test('different origins require explicit split',()=>{const s=base();s.animals.push({...s.animals[0],id_ganado:2,origin:2});s.config.groups[0].animals.push(2);assert.ok(R.infer(s).issues.some(x=>x.includes('distintos')));s.config.groups[0].split=true;assert.equal(R.infer(s).input.units.length,2);});
 test('overlapping occupancy is merged, group replacement is not rest',()=>{const o=R.occupancy({id_potrero:1},[{id_potrero:1,fecha_desde:'2026-09-20',fecha_hasta:'2026-09-25'},{id_potrero:1,fecha_desde:'2026-09-25',fecha_hasta:null}],'2026-10-01');assert.equal(o.occupied_days,11);});
