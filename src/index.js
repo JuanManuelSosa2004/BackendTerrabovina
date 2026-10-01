@@ -19,6 +19,7 @@ testConnection()
     await require('./database/sequelize').sequelize.query(
       'INSERT IGNORE INTO `SequelizeMeta` (`name`) VALUES (:name)',
       {replacements:{name:'20260927000001-intrapotrero-versiones.js'}});
+    await require('./rotation/startup').initialize();
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       if (process.env.STOCK_DAILY_SCHEDULER_ENABLED === 'true') {

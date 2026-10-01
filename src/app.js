@@ -32,6 +32,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/v2/auth', require('./routes/auth.routes'));
 app.use('/api/v2/usuarios', require('./routes/usuario.routes'));
 app.use('/api/v2/estancia', require('./routes/estancia.routes'));
+app.use('/api/v2/estancia/:estanciaId/rotacion', require('./rotation/routes'));
 app.use('/api/v2/potrero', require('./routes/potrero.routes'));
 app.use('/api/v2/ganado', require('./routes/ganado.routes'));
 app.use('/api/v2/empleado', require('./routes/empleado.routes'));

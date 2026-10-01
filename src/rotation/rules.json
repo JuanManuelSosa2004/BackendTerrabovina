@@ -1,0 +1,15 @@
+{
+  "version":"rotation_rules_v1",
+  "rules":[
+    {"id":"DATA","label":"Información vigente y completa","kind":"hard"},
+    {"id":"EXCLUDED","label":"Exclusión temporal","kind":"hard"},
+    {"id":"WATER","label":"Agua y acceso confirmados","kind":"hard"},
+    {"id":"DESTINATION","label":"Destinos permitidos por grupo","kind":"hard"},
+    {"id":"LOCK","label":"Grupo fijado temporalmente al origen","kind":"hard"},
+    {"id":"GROUP","label":"Mantener el grupo completo salvo permiso de división","kind":"hard"},
+    {"id":"REST","label":"Descanso desde la última desocupación completa","kind":"hard"},
+    {"id":"STAY","label":"Permanencia máxima del potrero ocupado","kind":"hard"},
+    {"id":"RESERVE","label":"Conservar reserva operativa en kg MS utilizables","kind":"hard"},
+    {"id":"COMPATIBILITY","label":"Convivencia entre grupos","kind":"hard"}
+  ]
+}

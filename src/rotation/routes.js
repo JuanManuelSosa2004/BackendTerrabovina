@@ -1,0 +1,16 @@
+const router=require('express').Router({mergeParams:true});
+const S=require('./service');
+router.use(require('../middlewares/auth.middleware').requireAuth);
+router.use(require('../middlewares/ownership.middleware').requireEstanciaOwnership());
+router.use((req,res,next)=>process.env.ROTATION_ENABLED!=='false'?next():res.status(404).json({error:'Rotación no habilitada.'}));
+router.use((req,res,next)=>require('./startup').isReady()?next():res.status(503).json({error:'El módulo de rotación no está disponible. Revisá las migraciones del módulo.'}));
+const handle=fn=>async(req,res)=>{try{res.json(await fn(Number(req.params.estanciaId),req));}catch(e){if(e.status)return res.status(e.status).json({error:e.message});throw e;}};
+router.get('/',handle(id=>S.getState(id)));
+router.put('/config',handle((id,r)=>S.saveConfig(id,r.body)));
+router.post('/observations',handle((id,r)=>S.observation(id,r.usuario.id_usuario,r.body)));
+router.post('/demand/refresh',handle(id=>S.refreshDemand(id)));
+router.post('/plans',handle((id,r)=>S.generate(id,r.usuario.id_usuario)));
+router.get('/plans/:planId',handle((id,r)=>S.getPlan(id,r.params.planId)));
+router.patch('/plans/:planId',handle((id,r)=>S.setPlanState(id,r.params.planId,r.body.estado)));
+router.post('/plans/:planId/execute-today',handle((id,r)=>S.executeToday(id,r.params.planId,r.usuario.id_usuario)));
+module.exports=router;
