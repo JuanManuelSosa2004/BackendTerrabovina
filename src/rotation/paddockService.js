@@ -13,7 +13,7 @@ async function configuration(id,t) {
 }
 
 async function paddocks(id) {
-  return rows(`SELECT p.id_potrero AS id,p.nombre AS name,p.superficie_ha AS area,ST_AsGeoJSON(p.geom) AS geometry,
+  return rows(`SELECT p.id_potrero AS id,p.nombre AS name,p.habilitado_ganado,p.superficie_ha AS area,ST_AsGeoJSON(p.geom) AS geometry,
     (SELECT COUNT(*) FROM asignacion_ganado a JOIN ganado g ON g.id_ganado=a.id_ganado
       WHERE a.id_potrero=p.id_potrero AND a.fecha_hasta IS NULL AND g.activo=1 AND a.fecha_desde<=:date) AS animals,
     (SELECT MAX(a.updated_at) FROM asignacion_ganado a WHERE a.id_potrero=p.id_potrero) AS assignment_changed,
@@ -53,7 +53,9 @@ function aggregate(p,stock,dmi,revision,included,job) {
   }
   if(!Number.isFinite(area)||area<=0)issues.push('No hay superficie pastoreable disponible.');
   if(job.estado==='EJECUTANDO')issues.push('Actualizando los datos del potrero…');
-  return {id:Number(p.id),name:p.name,animals:Number(p.animals),area,stock:available,growth,demand,included,issues,
+  const enabled = p.habilitado_ganado === undefined || Boolean(p.habilitado_ganado);
+  const relevantIssues = enabled ? issues : job.estado==='EJECUTANDO' ? ['Actualizando el consumo del potrero…'] : demand==null ? ['Actualizá el consumo para calcular los destinos.'] : [];
+  return {id:Number(p.id),name:p.name,enabled,animals:Number(p.animals),area,stock:available,growth,demand,included,issues:relevantIssues,
     stockDate:stock?.fecha_objetivo??null,demandDate:dmi?.fecha_calculo??null,
     accessible:!!revision,job:{estado:job.estado,error:job.error??null}};
 }
@@ -90,7 +92,7 @@ async function saveAvailability(id,body) {
 
 async function refresh(id) {
   const config=await configuration(id), excluded=new Set(config.data.simple?.excluded||[]);
-  const ps=(await paddocks(id)).filter(p=>!excluded.has(Number(p.id)));
+  const ps=(await paddocks(id)).filter(p=>!excluded.has(Number(p.id))||(!p.habilitado_ganado&&Number(p.animals)>0));
   const jobs=ps.map(p=>({id:p.id,estado:require('../controllers/estimacion.controller').iniciarStock(p.id,today(),Number(p.animals)>0).estado}));
   return {jobs};
 }

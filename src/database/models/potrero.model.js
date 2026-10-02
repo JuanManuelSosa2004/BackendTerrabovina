@@ -34,6 +34,7 @@ const Potrero = sequelize.define(
       allowNull: false,
       defaultValue: true,
     },
+    habilitado_ganado: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   },
   {
     tableName: 'potrero',

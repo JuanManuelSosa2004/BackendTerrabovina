@@ -162,4 +162,16 @@ async function hasPotreroOverlap(idEstancia, polygon, excludePotreroId = null) {
   return Number(row.total) > 0;
 }
 
-module.exports = { create, listByEstancia, getById, update, remove };
+// Operational closure preserves assignments: cattle must leave through recorded transfers.
+async function setUsage(req, res) {
+  const enabled = req.body?.habilitado;
+  if (typeof enabled !== 'boolean') return res.status(400).json({error:'habilitado debe ser verdadero o falso.'});
+  const id = req.potrero.id_potrero;
+  await sequelize.query('UPDATE potrero SET habilitado_ganado=:enabled, updated_at=NOW() WHERE id_potrero=:id AND activo=TRUE', {
+    replacements:{id,enabled}, type:QueryTypes.UPDATE,
+  });
+  const potrero = await potreroRepository.getPotreroById(id);
+  if (!potrero?.activo) return res.status(409).json({error:'El potrero está dado de baja.'});
+  return res.json(potrero);
+}
+module.exports = { create, listByEstancia, getById, update, remove, setUsage };

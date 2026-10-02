@@ -6,6 +6,11 @@ const PORT = process.env.PORT || 3000;
 
 testConnection()
   .then(async () => {
+    await require('./database/migrations/20261002000001-potrero-uso').up(
+      require('./database/sequelize').sequelize.getQueryInterface(), require('sequelize'));
+    await require('./database/sequelize').sequelize.query(
+      'INSERT IGNORE INTO `SequelizeMeta` (`name`) VALUES (:name)',
+      { replacements: { name: '20261002000001-potrero-uso.js' } });
     // Cambio aditivo e idempotente, antes de atender altas y balances.
     await require('./database/migrations/20260907000001-asignacion-dmi-ingreso').up(
       require('./database/sequelize').sequelize.getQueryInterface(), require('sequelize'));

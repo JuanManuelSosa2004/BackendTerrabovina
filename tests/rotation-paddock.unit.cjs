@@ -1,6 +1,26 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {recommend}=require('../src/rotation/paddockEngine');
 const p=(id,animals,stock,growth=0,average=10)=>({id,name:`P${id}`,animals,stock,growth,demand:animals*average,included:true,issues:[]});
+test('closed paddock evacuates every animal despite ample forage and exclusion',()=>{
+ const r=recommend([{...p(1,20,10000,1000),enabled:false,included:false},p(2,0,700),p(3,0,700)]);
+ assert.equal(r.totals.toMove,20);assert.equal(r.totals.allocated,20);assert.equal(r.totals.excessPaddocks,0);
+ assert.equal(r.recommendations[0].reason,'FUERA_USO');assert.equal(r.paddocks[0].projectedAnimals,0);
+ assert.equal(r.paddocks[0].incoming,0);
+});
+test('closed paddock retains a pending evacuation without inventing missing demand',()=>{
+ const r=recommend([{...p(1,20,null),growth:null,demand:null,enabled:false},p(2,0,700)]);
+ assert.equal(r.totals.toMove,20);assert.equal(r.totals.pending,20);assert.equal(r.partial,true);
+ assert.equal(r.recommendations[0].needsDemand,true);assert.equal(r.paddocks[0].projectedAnimals,20);
+});
+test('closed origins need valid consumption but no forage estimate and cannot receive',()=>{
+ const r=recommend([{...p(1,20,null),growth:null,enabled:false},{...p(2,0,10000),enabled:false},p(3,0,700)]);
+ assert.equal(r.totals.allocated,10);assert.equal(r.totals.pending,10);assert.equal(r.partial,false);
+ assert.equal(r.paddocks[1].incoming,0);assert.equal(r.paddocks[0].projectedAnimals,10);
+});
+test('reactivating restores the original capacity rule',()=>{
+ const r=recommend([{...p(1,20,10000),enabled:true},p(2,0,700)]);
+ assert.equal(r.totals.toMove,0);assert.equal(r.paddocks[0].status,'DISPONIBLE');
+});
 test('quantity-only proposal relieves overload across multiple destinations',()=>{
  const r=recommend([p(1,20,700),p(2,0,420),p(3,0,280)]);
  assert.equal(r.totals.toMove,10);assert.equal(r.totals.allocated,10);assert.equal(r.totals.pending,0);

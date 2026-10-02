@@ -150,6 +150,7 @@ async function createEnPotrero(req, res) {
       // el cliente puede simplemente reintentar la solicitud.
       return res.status(409).json({ error: 'Colisión generando numero_identificacion, reintente la solicitud.' });
     }
+    if (error.status === 400) return res.status(400).json({error:error.message});
     throw error;
   }
 }

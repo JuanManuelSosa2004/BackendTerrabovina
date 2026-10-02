@@ -26,7 +26,7 @@ async function createPotrero({ id_estancia, nombre, descripcion, superficie_ha, 
 
 async function getPotreroById(id, transaction) {
   const rows = await sequelize.query(
-    `SELECT id_potrero, id_estancia, nombre, descripcion, superficie_ha, activo,
+    `SELECT id_potrero, id_estancia, nombre, descripcion, superficie_ha, activo, habilitado_ganado,
             ST_AsGeoJSON(geom) AS geom, created_at, updated_at
      FROM \`potrero\`
      WHERE id_potrero = :id`,
@@ -43,7 +43,7 @@ async function getPotreroById(id, transaction) {
 // getEmpleadosByEstancia.
 async function getPotrerosByEstancia(id_estancia) {
   const rows = await sequelize.query(
-    `SELECT id_potrero, id_estancia, nombre, descripcion, superficie_ha, activo,
+    `SELECT id_potrero, id_estancia, nombre, descripcion, superficie_ha, activo, habilitado_ganado,
             ST_AsGeoJSON(geom) AS geom, created_at, updated_at
      FROM \`potrero\`
      WHERE id_estancia = :id_estancia AND activo = TRUE

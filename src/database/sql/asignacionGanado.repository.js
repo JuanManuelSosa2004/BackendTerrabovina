@@ -120,6 +120,15 @@ async function countGanadoHistoricoByPotrero(id_potrero, transaction) {
 }
 
 async function crearAsignacion({ id_ganado, id_potrero, fecha_desde, estado, dmi_ingreso_kg_dia = null }, transaction) {
+  // Lock the same row modified by /uso: no incoming assignment can race a closure.
+  if (!transaction) return sequelize.transaction(t => crearAsignacion({id_ganado,id_potrero,fecha_desde,estado,dmi_ingreso_kg_dia}, t));
+  const [destino] = await sequelize.query('SELECT activo, habilitado_ganado FROM potrero WHERE id_potrero=:id FOR UPDATE', {
+    replacements:{id:id_potrero}, type:QueryTypes.SELECT, transaction,
+  });
+  if (!destino?.activo || !destino.habilitado_ganado) {
+    const error = new Error('El potrero destino está fuera de uso y no puede recibir ganado.');
+    error.status = 400; throw error;
+  }
   const [insertId] = await sequelize.query(
     `INSERT INTO \`asignacion_ganado\` (id_ganado, id_potrero, fecha_desde, estado, created_at, updated_at, dmi_ingreso_kg_dia)
      VALUES (:id_ganado, :id_potrero, :fecha_desde, :estado, NOW(), NOW(), :dmi_ingreso_kg_dia)`,

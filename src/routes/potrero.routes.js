@@ -21,6 +21,7 @@ router.post('/:potreroId/intrapotrero', intrapotrero.save);
 // #14, #15, #16
 router.get('/:potreroId', potreroController.getById);
 router.patch('/:potreroId', potreroController.update);
+router.patch('/:potreroId/uso', potreroController.setUsage);
 router.delete('/:potreroId', potreroController.remove);
 
 // #18, #22
