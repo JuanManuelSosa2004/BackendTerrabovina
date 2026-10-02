@@ -24,7 +24,7 @@ async function getPotreroDestinoDeUsuario(id_potrero, id_usuario, transaction) {
 // justamente en el potrero origen (no en cualquier otro).
 async function getGanadoConAsignacionActivaEnPotrero(id_ganado, id_estancia, id_potrero, transaction) {
   const rows = await sequelize.query(
-    `SELECT g.id_ganado, a.id_asignacion
+    `SELECT g.id_ganado, a.id_asignacion, a.fecha_desde
      FROM \`ganado\` g
      JOIN \`asignacion_ganado\` a ON a.id_ganado = g.id_ganado AND a.fecha_hasta IS NULL
      WHERE g.id_ganado = :id_ganado AND g.id_estancia = :id_estancia AND g.activo = TRUE
@@ -58,8 +58,13 @@ async function crear(req, res) {
   // se parsea a Date acá y esa instancia es la que viaja al INSERT (igual
   // que fecha_generacion/fecha_calculo en recomendacion/estimacion).
   const fechaMovimientoDate = new Date(fecha_movimiento);
-  if (Number.isNaN(fechaMovimientoDate.getTime())) {
+  if (Number.isNaN(fechaMovimientoDate.getTime()) || typeof fecha_movimiento !== 'string' ||
+      !require('../rotation/rules').validDate(fecha_movimiento.slice(0, 10))) {
     return res.status(400).json({ error: 'fecha_movimiento no es una fecha válida.' });
+  }
+  const fechaMovimiento = fechaSolo(fecha_movimiento);
+  if (fechaMovimiento > require('../utils/diasPrevios').fechaIngreso()) {
+    return res.status(400).json({ error: 'No se puede registrar un traslado en una fecha futura.' });
   }
   if (idsGanado.length === 0 || idsGanado.some((id) => !id)) {
     return res.status(400).json({ error: 'id_ganado debe ser un arreglo no vacío de ids válidos.' });
@@ -92,14 +97,17 @@ async function crear(req, res) {
         t
       );
 
-      const fechaMovimiento = fechaSolo(fecha_movimiento);
-
       for (const id_ganado of idsGanado) {
         const ganado = await getGanadoConAsignacionActivaEnPotrero(id_ganado, id_estancia, id_potrero_origen, t);
         if (!ganado) {
           const err = new Error(
             `El animal ${id_ganado} no existe, no pertenece a la estancia o no tiene una asignación activa en el potrero origen.`
           );
+          err.status = 400;
+          throw err;
+        }
+        if (fechaMovimiento < ganado.fecha_desde) {
+          const err = new Error(`El traslado del animal ${id_ganado} no puede ser anterior a su ingreso al potrero origen.`);
           err.status = 400;
           throw err;
         }

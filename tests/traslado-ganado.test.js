@@ -90,6 +90,10 @@ async function crearGanadoEnPotrero(token, id_potrero, overrides = {}) {
     peso_kg: 300,
     ...overrides,
   });
+  // Historical transfer fixtures must have entered before their movement dates.
+  await sequelize.query('UPDATE asignacion_ganado SET fecha_desde = ? WHERE id_ganado = ?', {
+    replacements: ['2025-01-01', res.body.id_ganado],
+  });
   return res.body;
 }
 
@@ -172,6 +176,16 @@ describe('POST /api/v2/potrero/:potreroId/traslado-ganado', () => {
   test('sin token de sesión devuelve 401', async () => {
     const res = await request(app).post(`/api/v2/potrero/${potreroOrigenId}/traslado-ganado`).send({});
     expect(res.status).toBe(401);
+  });
+
+  test.each(['2099-01-01', '2026-02-30', '2024-12-31'])('rechaza traslado fuera de la cronología: %s sin alterar ubicación', async fecha => {
+    const ganado = await crearGanadoEnPotrero(token, potreroOrigenId);
+    const res = await crearTraslado(token, potreroOrigenId, {
+      id_potrero_destino: potreroDestinoId, id_ganado: [ganado.id_ganado], fecha_movimiento: fecha,
+    });
+    expect(res.status).toBe(400);
+    const [rows] = await sequelize.query('SELECT id_potrero, fecha_hasta FROM asignacion_ganado WHERE id_ganado=?', {replacements:[ganado.id_ganado]});
+    expect(rows).toEqual([{id_potrero:potreroOrigenId, fecha_hasta:null}]);
   });
 
   test.each([

@@ -54,7 +54,9 @@ function aggregate(p,stock,dmi,revision,included,job) {
   if(!Number.isFinite(area)||area<=0)issues.push('No hay superficie pastoreable disponible.');
   if(job.estado==='EJECUTANDO')issues.push('Actualizando los datos del potrero…');
   const enabled = p.habilitado_ganado === undefined || Boolean(p.habilitado_ganado);
-  const relevantIssues = enabled ? issues : job.estado==='EJECUTANDO' ? ['Actualizando el consumo del potrero…'] : demand==null ? ['Actualizá el consumo para calcular los destinos.'] : [];
+  // Evacuating a closed origin only needs current demand; its pending forage
+  // calculation must not hide destinations that already have valid capacity.
+  const relevantIssues = enabled ? issues : demand==null ? ['Actualizá el consumo para calcular los destinos.'] : [];
   return {id:Number(p.id),name:p.name,enabled,animals:Number(p.animals),area,stock:available,growth,demand,included,issues:relevantIssues,
     stockDate:stock?.fecha_objetivo??null,demandDate:dmi?.fecha_calculo??null,
     accessible:!!revision,job:{estado:job.estado,error:job.error??null}};

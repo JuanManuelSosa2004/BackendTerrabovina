@@ -454,7 +454,7 @@ describe('Stock diario asíncrono', () => {
     expect(predictDmi).not.toHaveBeenCalled();
     const latest = await authHeader(request(app).get(`/api/v2/potrero/${id_potrero}/estimacion-stock`), token);
     expect(latest.status).toBe(200);
-    expect(latest.body.detalle_json.metodologia).toBe('balance_diario_asignaciones_v3');
+    expect(latest.body.detalle_json.metodologia).toBe('balance_diario_ambientes_v4');
     const history = await authHeader(request(app).get(`/api/v2/potrero/${id_potrero}/estimacion-stock/historico`), token);
     expect(history.body.estimaciones).toHaveLength(1);
   });

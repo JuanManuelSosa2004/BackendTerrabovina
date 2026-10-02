@@ -87,6 +87,9 @@ async function crearGanadoEnPotrero(token, id_potrero, overrides = {}) {
     peso_kg: 300,
     ...overrides,
   });
+  await sequelize.query('UPDATE asignacion_ganado SET fecha_desde=? WHERE id_ganado=?', {
+    replacements:['2019-01-01',res.body.id_ganado],
+  });
   return res.body;
 }
 
@@ -306,9 +309,8 @@ describe('GET /api/v2/ganado/:ganadoId/asignaciones', () => {
     const res = await authHeader(request(app).get(`/api/v2/ganado/${ganado.id_ganado}/asignaciones`), token);
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(3);
-    // La primera (alta en p1) tiene fecha_desde = hoy, más reciente que
-    // las dos fechas fijas de 2021/2022 usadas en los traslados.
-    expect(res.body[0].id_potrero).toBe(p1);
+    // Chronological history ends at the latest destination (2022).
+    expect(res.body[0].id_potrero).toBe(p3);
     expect(res.body.map((a) => a.id_potrero).sort((a, b) => a - b)).toEqual([p1, p2, p3].sort((a, b) => a - b));
   });
 
