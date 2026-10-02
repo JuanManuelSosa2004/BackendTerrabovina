@@ -21,7 +21,7 @@ function start(potreroId, run, rerun = false) {
   }).then(resultado => {
     Object.assign(job, { estado: 'COMPLETADO', resultado });
   }).catch(error => {
-    Object.assign(job, { estado: 'ERROR', error: error.message });
+    Object.assign(job, { estado: 'ERROR', error: error.message, ...(error.code ? { codigo: error.code } : {}) });
   }).finally(() => {
     job.finalizado = new Date().toISOString();
     setTimeout(() => { if (jobs.get(potreroId) === job) jobs.delete(potreroId); }, 3600000).unref();

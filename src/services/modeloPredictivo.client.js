@@ -23,12 +23,13 @@ const TIMEOUT_MS = Number(process.env.MODEL_API_TIMEOUT_MS) || 15000;
 const STOCK_TIMEOUT_MS = Number(process.env.MODEL_API_STOCK_JOB_TIMEOUT_MS) || 3600000;
 
 class ModeloPredictivoError extends Error {
-  constructor(message, { cause, status, detail } = {}) {
+  constructor(message, { cause, status, detail, code } = {}) {
     super(message);
     this.name = 'ModeloPredictivoError';
     if (cause) this.cause = cause;
     this.status = status;
     this.detail = detail;
+    this.code = code;
   }
 }
 
@@ -108,6 +109,11 @@ async function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms,
     throw new ModeloPredictivoError(message, {cause});
   }
   if (response.status < 200 || response.status >= 300) {
+    let body;
+    try { body = JSON.parse(response.text); } catch { /* Respuesta no JSON de un proxy. */ }
+    if (response.status === 422 && body?.codigo === 'COBERTURA_NO_COMPATIBLE' && typeof body.error === 'string') {
+      throw new ModeloPredictivoError(body.error, { status: 422, code: body.codigo, detail: body });
+    }
     throw new ModeloPredictivoError(`El modelo predictivo respondió ${response.status} en /predict/stock. ${response.text}`, {status:response.status,detail:response.text});
   }
   try { return JSON.parse(response.text); }
