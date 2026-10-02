@@ -53,3 +53,17 @@ test('saldo reutilizado, refresco cinco días y sin duplicar días',async()=>{
  assert.equal(c.seguimiento_diario.dias.some(d=>d.provisional),false);
  assert.equal(c.stock_final_utilizable.valor_kg_ms_ha.central,50);
 });
+
+test('conserva el supuesto ganadero y su origen aunque el próximo bloque no lo necesite',async()=>{
+ const assumption={activo:true,cobertura_observada:'Cultivos temporarios'};
+ let count=0;
+ const base={potrero:{nombre:'test',geom:{type:'Polygon'}},assignments:[],estimates:[],
+  predict:async p=>({...model(p.fecha),supuesto_uso_ganadero:++count===2?assumption:null})};
+ const a=await calculateDaily({...base,fecha:'2026-09-05'});
+ const b=await calculateDaily({...base,fecha:'2026-09-10',previous:{detalle_json:a}});
+ assert.deepEqual(b.supuesto_uso_ganadero,assumption);
+ assert.deepEqual(b.seguimiento_diario.observaciones[1].supuesto_uso_ganadero,assumption);
+ const c=await calculateDaily({...base,fecha:'2026-09-15',previous:{detalle_json:b}});
+ assert.deepEqual(c.supuesto_uso_ganadero,assumption);
+ assert.equal(c.seguimiento_diario.observaciones[2].supuesto_uso_ganadero,null);
+});
