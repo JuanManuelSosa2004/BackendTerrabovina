@@ -13,7 +13,9 @@ function growthTrace(period, reference) {
     factor_aplicado: number(period.factor_dmp_aplicado),
     factor_original: number(period.factor_dmp_original),
     factor_limitado: Boolean(period.factor_limitado),
-    fecha_imagen: period.dmp_actual?.scene_date ?? null,
+    metodo_crecimiento: period.metodo_crecimiento ?? 'REFERENCIA_AJUSTADA_DMP',
+    motivo_respaldo: period.motivo_respaldo ?? null,
+    fecha_imagen: period.dmp_actual?.escena?.fecha ?? period.dmp_actual?.scene_date ?? null,
     anios_historicos: period.dmp_historico?.cantidad_anios_validos ?? null,
   };
 }
@@ -53,6 +55,11 @@ function compareGrowth(stock, valid) {
       || !close(current, number(row.bruto?.central))
       || !close(current, reference*factor)
       || (row.intrapotrero?.factor != null && row.intrapotrero.factor !== 1)) return result;
+  if (trace.metodo_crecimiento === 'REFERENCIA_REGIONAL') return {
+    ...result, ...trace, estado:'base_conservada', metodo:'referencia_regional_estacional',
+    diferencia_porcentual:null, provisional:Boolean(row.provisional), fecha:row.fecha,
+    mensaje:'Crecimiento estimado con la referencia regional estacional; sin ajuste satelital disponible.',
+  };
   return {...result, ...trace, estado:'comparacion_disponible',
     diferencia_porcentual: reference > 0 ? (factor-1)*100 : null,
     provisional: Boolean(row.provisional), fecha:row.fecha,

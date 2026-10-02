@@ -86,7 +86,7 @@ async function calculateDaily({ potrero, fecha, previous, assignments, estimates
   if (!valid) {
     result = await predict({ nombre_potrero:potrero.nombre, geojson:potrero.geom, fecha, consumo_diario_total_kg_ms:0 });
     ledger = rowsFromCalculation(result);
-    observations = [{ fecha, detalle_dmp:result.dmp, referencias:result.referencias_regionales, supuesto_uso_ganadero:result.supuesto_uso_ganadero }];
+    observations = [{ fecha, detalle_dmp:result.dmp, referencias:result.referencias_regionales, supuesto_uso_ganadero:result.supuesto_uso_ganadero, respaldo_estimacion:result.respaldo_estimacion }];
     refreshed = fecha;
   } else {
     result = structuredClone(old);
@@ -100,7 +100,8 @@ async function calculateDaily({ potrero, fecha, previous, assignments, estimates
       const growth = await predict({ nombre_potrero:potrero.nombre, geojson:potrero.geom, fecha:end,
         consumo_diario_total_kg_ms:0, dias_actualizacion:5 });
       ledger = ledger.filter(d=>d.fecha<=refreshed).concat(rowsFromCalculation(growth));
-      observations.push({fecha:end,detalle_dmp:growth.dmp,referencias:growth.referencias_regionales,supuesto_uso_ganadero:growth.supuesto_uso_ganadero});
+      observations.push({fecha:end,detalle_dmp:growth.dmp,referencias:growth.referencias_regionales,supuesto_uso_ganadero:growth.supuesto_uso_ganadero,respaldo_estimacion:growth.respaldo_estimacion});
+      result.respaldo_estimacion = growth.respaldo_estimacion;
       // El saldo acumulado sigue incluyendo producción calculada con el supuesto.
       if (growth.supuesto_uso_ganadero?.activo) result.supuesto_uso_ganadero = growth.supuesto_uso_ganadero;
       refreshed = end;

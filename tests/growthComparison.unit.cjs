@@ -1,6 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {compareGrowth}=require('../src/services/growthComparison.service');
+const {growthTrace}=require('../src/services/growthComparison.service');
 const {calculateDaily,rowsFromCalculation}=require('../src/services/stockDaily.service');
 function fixture({factor=1.2,ref=10,day='2026-09-30',provisional=false}={}) {
  const period={fecha_fin:'2026-09-30',factor_dmp_aplicado:factor,factor_dmp_original:factor,
@@ -10,6 +11,21 @@ function fixture({factor=1.2,ref=10,day='2026-09-30',provisional=false}={}) {
  const row={...rowsFromCalculation(result)[0],fecha:day,provisional,intrapotrero:{factor:1}};
  return {fecha_objetivo:day,crecimiento_bruto_kg_ms_ha_dia:String(ref*factor),detalle_json:{...result,seguimiento_diario:{dias:[row],observaciones:[{detalle_dmp:result.dmp}]}}};
 }
+test('regional fallback does not claim observed normal climate or a DMP comparison',()=>{
+ const stock=fixture({factor:1});
+ const row=stock.detalle_json.seguimiento_diario.dias[0];
+ row.traza_crecimiento={...row.traza_crecimiento,metodo_crecimiento:'REFERENCIA_REGIONAL',factor_original:null,motivo_respaldo:'Sin imágenes',fecha_imagen:null};
+ const c=compareGrowth(stock,true);
+ assert.equal(c.estado,'base_conservada');
+ assert.equal(c.diferencia_porcentual,null);
+ assert.equal(c.crecimiento_kg_ms_ha_dia,10);
+ assert.equal(c.metodo,'referencia_regional_estacional');
+ assert.equal(c.fecha_imagen,null);
+});
+test('reads actual nested image date and supports absent DMP observations',()=>{
+ assert.equal(growthTrace({dmp_actual:{escena:{fecha:'2026-09-20'}}},{}).fecha_imagen,'2026-09-20');
+ assert.equal(growthTrace({dmp_actual:null},{}).fecha_imagen,null);
+});
 test('compares the existing estimate and reference without modifying the ledger',()=>{
  const stock=fixture(),before=JSON.stringify(stock),c=compareGrowth(stock,true);
  assert.equal(c.estado,'comparacion_disponible');
