@@ -6,10 +6,13 @@ const { setPotreroGeom, assertValidPolygon } = require('../database/sql/geometry
 const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../database/sequelize');
 const { validateAndNormalizePolygon } = require('../database/sql/geometryValidation');
+const { validarSuperficie } = require('../utils/superficie');
 
 // #12: requireEstanciaOwnership ya validó pertenencia y cargó req.estancia.
 async function create(req, res) {
   const { nombre, descripcion, superficie_ha, activo, geom } = req.body ?? {};
+  const surfaceError = validarSuperficie(superficie_ha, 'superficie_ha');
+  if (surfaceError) return res.status(400).json({ error: surfaceError });
   const id_estancia = req.estancia.id_estancia;
 
   if (!nombre) {
@@ -67,6 +70,11 @@ async function getById(req, res) {
 // #15
 async function update(req, res) {
   const { nombre, descripcion, superficie_ha, activo, geom } = req.body ?? {};
+  if (activo !== undefined) {
+    return res.status(400).json({ error: 'Usá la operación de eliminar para dar de baja el potrero, o la de uso para desactivarlo sin desvincular ganado.' });
+  }
+  const surfaceError = validarSuperficie(superficie_ha, 'superficie_ha');
+  if (surfaceError) return res.status(400).json({ error: surfaceError });
   const id_potrero = req.potrero.id_potrero;
   const id_estancia = req.potrero.id_estancia;
 
@@ -93,7 +101,6 @@ async function update(req, res) {
   if (nombre !== undefined) fields.nombre = nombre;
   if (descripcion !== undefined) fields.descripcion = descripcion;
   if (superficie_ha !== undefined) fields.superficie_ha = superficie_ha;
-  if (activo !== undefined) fields.activo = activo;
 
   const potrero = await potreroRepository.updatePotrero(id_potrero, fields);
   if (normalizedGeom) {

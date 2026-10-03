@@ -6,6 +6,7 @@ const { sequelize } = require('../database/sequelize');
 const { isDuplicateEntryError } = require('../utils/dbErrors');
 const { validarPesoParaCategoria } = require('../utils/pesoRango');
 const { validarSexoParaCategoria } = require('../utils/sexoCategoria');
+const { validarDatosGanado } = require('../utils/ganadoInput');
 
 const UPDATABLE_FIELDS = [
   'numero_identificacion',
@@ -40,6 +41,8 @@ function validarCamposGanado(body, { requiereNumeroIdentificacion = true } = {})
        !Number.isFinite(Number(condicion_corporal)) || Number(condicion_corporal) < 1 || Number(condicion_corporal) > 5)) {
     return 'condicion_corporal es obligatoria para categoria VACA y debe estar entre 1 y 5.';
   }
+  const errorDatos = validarDatosGanado(body);
+  if (errorDatos) return errorDatos;
   return validarSexoParaCategoria(categoria, sexo) ?? validarPesoParaCategoria(categoria, peso_kg);
 }
 
@@ -179,7 +182,7 @@ async function update(req, res) {
     return res.status(400).json({ error: 'No hay campos para actualizar.' });
   }
 
-  if (['categoria','peso_kg','sexo','condicion_corporal'].some(key => fields[key] !== undefined)) {
+  if (['categoria','peso_kg','sexo','condicion_corporal','estado_fisiologico','fecha_nacimiento'].some(key => fields[key] !== undefined)) {
     const actual = await ganadoRepository.getGanadoById(req.ganado.id_ganado);
     const errorValidacion = validarCamposGanado({ ...actual, ...fields }, { requiereNumeroIdentificacion:false });
     if (errorValidacion) {
@@ -254,7 +257,7 @@ async function updateMultiple(req, res) {
       }
 
       for (const [id_ganado, fields] of fieldsById) {
-        if (!['categoria','peso_kg','sexo','condicion_corporal'].some(key => fields[key] !== undefined)) continue;
+        if (!['categoria','peso_kg','sexo','condicion_corporal','estado_fisiologico','fecha_nacimiento'].some(key => fields[key] !== undefined)) continue;
         const actual = await ganadoRepository.getGanadoById(id_ganado, t);
         const errorValidacion = validarCamposGanado({ ...actual, ...fields }, { requiereNumeroIdentificacion:false });
         if (errorValidacion) {

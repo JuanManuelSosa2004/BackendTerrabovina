@@ -8,12 +8,15 @@ const { setEstanciaGeom, assertValidPolygon } = require('../database/sql/geometr
 const { validateAndNormalizePolygon } = require('../database/sql/geometryValidation');
 const { sequelize } = require('../database/sequelize');
 const { QueryTypes } = require('sequelize');
+const { validarSuperficie } = require('../utils/superficie');
 
 // RF001 / CA002: el polígono es obligatorio al registrar la estancia (a
 // diferencia del código viejo, la V2 no tiene un endpoint .../geometria
 // separado: la geometría viaja en el propio recurso).
 async function create(req, res) {
   const { nombre, departamento, provincia, superficie_total_ha, geom } = req.body ?? {};
+  const surfaceError = validarSuperficie(superficie_total_ha, 'superficie_total_ha');
+  if (surfaceError) return res.status(400).json({ error: surfaceError });
   if (!nombre) {
     return res.status(400).json({ error: 'nombre es obligatorio.' });
   }
@@ -80,6 +83,8 @@ async function getById(req, res) {
 
 async function update(req, res) {
   const { nombre, departamento, provincia, superficie_total_ha, geom } = req.body ?? {};
+  const surfaceError = validarSuperficie(superficie_total_ha, 'superficie_total_ha');
+  if (surfaceError) return res.status(400).json({ error: surfaceError });
 
   let normalizedGeom;
   if (geom !== undefined) {

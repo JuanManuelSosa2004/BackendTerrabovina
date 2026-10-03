@@ -28,6 +28,10 @@ function aggregate(p,stock,dmi,revision,included,job) {
   const changed=Math.max(timestamp(p.assignment_changed),timestamp(p.cattle_changed));
   const date=today();
   if(stock) {
+    // Use the area measured from the same geometry as the saved balance;
+    // manually entered hectares must not inflate a destination's capacity.
+    const measuredArea = Number(stock.superficie_ha);
+    if (Number.isFinite(measuredArea) && measuredArea > 0) area = measuredArea;
     if(stock.fecha_objetivo!==date)issues.push('Actualizá el análisis de pasto.');
     if(timestamp(stock.fecha_calculo)<changed)issues.push('Cambió el ganado desde el último balance.');
     const saved=stock.detalle_json?.seguimiento_diario?.geometria;
