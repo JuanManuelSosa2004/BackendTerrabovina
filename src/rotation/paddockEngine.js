@@ -1,7 +1,8 @@
 'use strict';
 
 const HORIZON = 7;
-const VERSION = 'rotacion_por_potrero_v2';
+const {evaluatePriority, MODEL} = require('./fuzzyPriority');
+const VERSION = 'rotacion_por_potrero_v3';
 const round = value => Math.round(value * 100) / 100;
 
 // Inputs and decisions are aggregates per paddock, never animal identities.
@@ -19,7 +20,8 @@ function recommend(input) {
     const excess = valid ? Math.max(0, p.demand - capacity) : null;
     const average = valid && p.animals ? p.demand / p.animals : null;
     const remove = !enabled ? p.animals : average ? Math.min(p.animals, Math.ceil(Math.max(0, excess - 1e-9) / average)) : 0;
-    return {...p, enabled, issues: [...new Set(issues)], capacity, average, remove,
+    const priority = enabled && valid && remove > 0 ? evaluatePriority({...p, issues}) : null;
+    return {...p, enabled, issues: [...new Set(issues)], capacity, average, remove, priority,
       excess: excess == null ? null : round(excess),
       pressure: valid && capacity > 0 ? round(100 * p.demand / capacity) : null,
       status: !enabled ? 'FUERA_USO' : !p.included ? 'EXCLUIDO' : !valid ? 'SIN_DATOS' : remove ? 'EXCESO' : capacity > p.demand + 1e-9 ? 'DISPONIBLE' : 'EQUILIBRADO',
@@ -27,7 +29,8 @@ function recommend(input) {
   });
   const destinations = paddocks.filter(p => p.status === 'DISPONIBLE');
   const sources = paddocks.filter(p => p.status === 'EXCESO' || (!p.enabled && p.animals > 0)).sort((a,b) =>
-    Number(a.enabled) - Number(b.enabled) || (b.pressure ?? Infinity) - (a.pressure ?? Infinity) || b.remove - a.remove || a.id - b.id);
+    Number(a.enabled) - Number(b.enabled) || (b.priority?.score ?? 0) - (a.priority?.score ?? 0) ||
+    (b.pressure ?? Infinity) - (a.pressure ?? Infinity) || b.remove - a.remove || a.id - b.id);
   const recommendations = [];
   for (const source of sources) {
     const allocations = new Map();
@@ -52,7 +55,7 @@ function recommend(input) {
       remaining -= quantity;
     }
     recommendations.push({origin:source.id, name:source.name, remove:source.remove, reason:source.enabled?'EXCESO':'FUERA_USO', needsDemand:!source.average,
-      allocated:source.outgoing, unallocated:remaining, excess:source.excess,
+      allocated:source.outgoing, unallocated:remaining, excess:source.excess, priority:source.priority,
       excessPercent:source.capacity > 0 ? round(100 * (source.demand - source.capacity) / source.capacity) : null,
       destinations:[...allocations].map(([id, quantity]) => ({id, name:paddocks.find(p=>p.id===id).name, quantity}))});
   }
@@ -62,7 +65,7 @@ function recommend(input) {
     p.projectedPressure = p.capacity > 0 ? round(100 * p.projectedDemand / p.capacity) : null;
     p.remainingExcess = p.capacity == null ? null : round(Math.max(0,p.projectedDemand-p.capacity));
   }
-  return {version:VERSION, horizon:HORIZON, paddocks, recommendations,
+  return {version:VERSION, priorityModel:MODEL, horizon:HORIZON, paddocks, recommendations,
     partial:paddocks.some(p=>(p.included&&p.status==='SIN_DATOS')||(!p.enabled&&p.animals>0&&!p.average)),
     totals:{excessPaddocks:sources.filter(p=>p.enabled).length, closedPaddocks:sources.filter(p=>!p.enabled).length, toMove:sources.reduce((s,p)=>s+p.remove,0),
       allocated:sources.reduce((s,p)=>s+p.outgoing,0), pending:sources.reduce((s,p)=>s+p.remove-p.outgoing,0)}};
