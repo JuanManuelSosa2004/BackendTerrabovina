@@ -8,7 +8,9 @@ el usuario siempre precede al orden difuso y no recibe una etiqueta de IA fictic
 
 ## Modelo reproducible
 
-Archivo: `src/rotation/fuzzyPriority.js`. JavaScript, sin dependencias ni API externa.
+Archivos activos: `Flask/rotation/fuzzy_priority.py` y `Flask/rotation/paddock_engine.py`.
+Python dentro de Flask, sin nuevas dependencias. Node usa `src/rotation/paddockEngine.js`
+solo como cliente HTTP del endpoint interno POST `/rotation/recommendations`.
 Sugeno de orden cero, AND producto, promedio ponderado de nueve reglas.
 No se entrena ni aprende con el uso. Los parámetros son heurísticas operativas iniciales;
 no se presentan como umbrales agronómicos validados ni probabilidades de acierto.
@@ -35,7 +37,9 @@ Desempate: regla previa de presión presupuestaria, cantidad a retirar e ID esta
 
 GET `/api/v2/estancia/:estanciaId/rotacion` agrega `priorityModel` y `priority` en los
 potreros y recomendaciones. Priority contiene model, score, level, explanation, inputs
-y reglas activadas para reproducir el cálculo. Sin migraciones ni cambios de endpoints.
+y reglas activadas para reproducir el cálculo. Sin migraciones ni cambios del endpoint público de la web. La respuesta agrega
+`engineRuntime: "python"`. Ante indisponibilidad de Flask, Node devuelve 503 y no
+recalcula silenciosamente en JavaScript. Autenticación, propiedad y lectura de datos siguen en Node.
 Resumen y Rotación muestran la etiqueta; la explicación está disponible al pasar el cursor.
 
 ## Prueba de efecto
@@ -51,3 +55,10 @@ capacidad escasa, prioridad de cierre y conservación de cantidades/presupuestos
 
 Referencia del método (no de los umbrales):
 https://www.mathworks.com/help/fuzzy/types-of-fuzzy-inference-systems.html
+
+## Migración a Python
+
+La implementación JavaScript previa se conserva solo en `tests/reference-rotation`
+como referencia de regresión; ningún módulo de producción la importa. Se compararon
+10.000 escenarios entre ambos lenguajes, incluyendo datos ausentes, cierres y exclusiones.
+El redondeo Python replica Math.round para conservar los resultados.

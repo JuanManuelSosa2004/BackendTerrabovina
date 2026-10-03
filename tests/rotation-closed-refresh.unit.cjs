@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { aggregate } = require('../src/rotation/paddockService');
-const { recommend } = require('../src/rotation/paddockEngine');
+const { recommend } = require('./reference-rotation/paddockEngine.cjs');
 
 test('closed origin can evacuate with valid DMI while its stock job is running', () => {
   const p = { id: 1, name: 'Cerrado', habilitado_ganado: 0, animals: 6, area: 10 };

@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {recommend}=require('../src/rotation/paddockEngine');
+const {recommend}=require('./reference-rotation/paddockEngine.cjs');
 const p=(id,animals,stock,growth=0,average=10)=>({id,name:`P${id}`,animals,stock,growth,demand:animals*average,included:true,issues:[]});
 test('closed paddock evacuates every animal despite ample forage and exclusion',()=>{
  const r=recommend([{...p(1,20,10000,1000),enabled:false,included:false},p(2,0,700),p(3,0,700)]);

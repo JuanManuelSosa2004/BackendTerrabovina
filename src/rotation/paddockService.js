@@ -77,7 +77,7 @@ async function getState(id) {
       rows('SELECT * FROM intrapotrero_version WHERE id_potrero=:id ORDER BY id DESC LIMIT 1',{id:p.id})]);
     inputs.push(aggregate(p,stock,dmi,revisions[0],!excluded.has(Number(p.id)),require('../services/stockJobs').get(p.id)));
   }
-  return {...recommend(inputs),revision:config.revision,date:today(),start:day(today(),1),
+  return {...await recommend(inputs),revision:config.revision,date:today(),start:day(today(),1),
     refreshing:inputs.some(p=>p.job.estado==='EJECUTANDO')};
 }
 

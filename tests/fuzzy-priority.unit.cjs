@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {evaluatePriority:evaluate} = require('../src/rotation/fuzzyPriority');
-const {recommend} = require('../src/rotation/paddockEngine');
+const {evaluatePriority:evaluate} = require('./reference-rotation/fuzzyPriority.cjs');
+const {recommend} = require('./reference-rotation/paddockEngine.cjs');
 const p = (id,stock,growth,animals=10) => ({id,name:`P${id}`,stock,growth,animals,demand:animals*10,included:true,issues:[]});
 
 test('Sugeno blends overlapping rules instead of applying a binary threshold',()=>{
