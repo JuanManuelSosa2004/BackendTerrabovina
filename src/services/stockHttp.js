@@ -6,10 +6,31 @@ const https = require('node:https');
 // por servidor deja capacidad para registrar ganado y recalcular su demanda.
 // La espera en cola no consume el plazo de ejecución de la petición.
 const stockQueues = new Map();
-function postStockJson(url, body, timeoutMs) {
+function postStockJson(url, body, timeoutMs, onProgress) {
   const key = new URL(url).origin;
   const previous = stockQueues.get(key) ?? Promise.resolve();
-  const result = previous.then(() => sendStockJson(url, body, timeoutMs));
+  const result = previous.then(async () => {
+    if (!onProgress) return sendStockJson(url, body, timeoutMs);
+    const progressId = require('node:crypto').randomUUID();
+    let stopped = false, pending = false;
+    const poll = async () => {
+      if (stopped || pending) return;
+      pending = true;
+      try {
+        const response = await fetch(`${url}/progress/${progressId}`, {signal:AbortSignal.timeout(2500)});
+        if (response.ok) {
+          const value = await response.json();
+          if (!stopped && Number.isFinite(value.porcentaje)) onProgress(value.porcentaje);
+        }
+      } catch { /* Missing progress must not interrupt the stock calculation. */ }
+      finally { pending = false; }
+    };
+    const timer = setInterval(poll, 1500);
+    try {
+      const response = await sendStockJson(url, {...body, progress_id:progressId}, timeoutMs);
+      return response;
+    } finally { stopped = true; clearInterval(timer); }
+  });
   const settled = result.then(() => {}, () => {});
   stockQueues.set(key, settled);
   settled.then(() => {

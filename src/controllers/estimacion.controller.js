@@ -247,7 +247,7 @@ async function crearEstimacionStock(req, res) {
 }
 
 function iniciarStock(id_potrero, fecha = fechaLocalActual(), refreshDmi = false) {
-  return require('../services/stockJobs').start(id_potrero, async () => {
+  return require('../services/stockJobs').start(id_potrero, async (onProgress) => {
   if (refreshDmi) {
     let status = 200, body;
     await crearEstimacionNutricional({potrero:{id_potrero}}, {status(code){status=code;return this;},json(value){body=value;return this;}});
@@ -264,9 +264,12 @@ function iniciarStock(id_potrero, fecha = fechaLocalActual(), refreshDmi = false
       estimacionDemandaRepository.getHistoricoByPotrero(id_potrero),
     ]);
     const revisions = await require('../database/sql/intrapotrero.repository').history(id_potrero);
+    onProgress(3);
     const resultado = await require('../services/stockDaily.service').calculateDaily({
       potrero, fecha, previous, assignments, estimates, predict: predictStock, revisions,
+      onProgress: value => onProgress(3 + value * 0.9),
     });
+    onProgress(95);
     const estimacion = await sequelize.transaction(transaction =>
       estimacionStockRepository.crear(stockPersistible(id_potrero, dmi, resultado), transaction)
     );

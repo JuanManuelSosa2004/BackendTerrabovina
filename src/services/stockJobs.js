@@ -6,20 +6,25 @@ function start(potreroId, run, rerun = false) {
     if (rerun) previous.pendingRun = run;
     return previous;
   }
-  const job = { id: randomUUID(), estado: 'EJECUTANDO', iniciado: new Date().toISOString() };
+  const job = { id: randomUUID(), estado: 'EJECUTANDO', porcentaje: 0, iniciado: new Date().toISOString() };
+  const report = value => {
+    if (job.estado === 'EJECUTANDO' && Number.isFinite(value)) {
+      job.porcentaje = Math.max(job.porcentaje, Math.min(99, Math.max(0, Math.floor(value))));
+    }
+  };
   jobs.set(potreroId, job);
   Promise.resolve().then(async () => {
     let next = job.pendingRun ?? run, result;
     while (next) {
       delete job.pendingRun;
-      try { result = await next(); }
+      try { result = await next(report); }
       catch(error) { if (!job.pendingRun) throw error; }
       next = job.pendingRun;
     }
     delete job.pendingRun;
     return result;
   }).then(resultado => {
-    Object.assign(job, { estado: 'COMPLETADO', resultado });
+    Object.assign(job, { estado: 'COMPLETADO', porcentaje: 100, resultado });
   }).catch(error => {
     Object.assign(job, { estado: 'ERROR', error: error.message, ...(error.code ? { codigo: error.code } : {}) });
   }).finally(() => {

@@ -89,7 +89,7 @@ function predictDmi({ animales }) {
   return postJson('/predict/dmi', { animales });
 }
 
-async function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms, geojson, dias_actualizacion }) {
+async function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms, geojson, dias_actualizacion }, onProgress) {
   if (!BASE_URL) throw new ModeloPredictivoError('MODEL_API_BASE_URL no está configurada.');
   let response;
   try {
@@ -100,7 +100,7 @@ async function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms,
     consumo_fuente: 'ultima_estimacion_dmi_persistida',
     geojson,
     ...(dias_actualizacion == null ? {} : { dias_actualizacion }),
-  }, STOCK_TIMEOUT_MS);
+  }, STOCK_TIMEOUT_MS, onProgress);
   } catch (cause) {
     const code = cause.code || 'ERROR_CONEXION';
     const message = code === 'STOCK_TIMEOUT'

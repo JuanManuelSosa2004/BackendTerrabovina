@@ -8,6 +8,16 @@ async function fixture(t, handler) {
  t.after(()=>{server.closeAllConnections();server.close();});
  return `http://127.0.0.1:${server.address().port}/predict/stock`;
 }
+
+test('reports actual model progress and preserves the original JSON response',async t=>{
+ let identifier;
+ const url=await fixture(t,(req,res)=>{
+  if(req.method==='GET') {assert.ok(req.url.endsWith(identifier));res.setHeader('Content-Type','application/json');res.end('{"porcentaje":37}');return;}
+  let body='';req.on('data',c=>body+=c);req.on('end',()=>{identifier=JSON.parse(body).progress_id;setTimeout(()=>res.end('{"stock":123}'),1850);});
+ });
+ const values=[];const result=await postStockJson(url,{},3000,p=>values.push(p));
+ assert.deepEqual(values,[37]);assert.deepEqual(JSON.parse(result.text),{stock:123});
+});
 test('espera cabeceras demoradas y recibe el JSON completo',async t=>{
  const url=await fixture(t,(req,res)=>setTimeout(()=>res.end('{"ok":true}'),80));
  const result=await postStockJson(url,{test:true},1000);

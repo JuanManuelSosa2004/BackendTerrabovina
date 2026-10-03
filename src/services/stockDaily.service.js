@@ -78,13 +78,13 @@ function rowsFromCalculation(result) {
   })));
 }
 
-async function calculateDaily({ potrero, fecha, previous, assignments, estimates, predict, revisions=[] }) {
+async function calculateDaily({ potrero, fecha, previous, assignments, estimates, predict, revisions=[], onProgress=()=>{} }) {
   const old = previous?.detalle_json;
   const geom = JSON.stringify(potrero.geom);
   let result, ledger, observations, refreshed;
   const valid = [VERSION,'balance_diario_asignaciones_v3'].includes(old?.metodologia) && old.seguimiento_diario?.geometria === geom;
   if (!valid) {
-    result = await predict({ nombre_potrero:potrero.nombre, geojson:potrero.geom, fecha, consumo_diario_total_kg_ms:0 });
+    result = await predict({ nombre_potrero:potrero.nombre, geojson:potrero.geom, fecha, consumo_diario_total_kg_ms:0 }, onProgress);
     ledger = rowsFromCalculation(result);
     observations = [{ fecha, detalle_dmp:result.dmp, referencias:result.referencias_regionales, supuesto_uso_ganadero:result.supuesto_uso_ganadero, respaldo_estimacion:result.respaldo_estimacion }];
     refreshed = fecha;
@@ -95,10 +95,13 @@ async function calculateDaily({ potrero, fecha, previous, assignments, estimates
     refreshed = result.seguimiento_diario.crecimiento_actualizado_hasta;
     if (fecha < old.potrero.fecha_objetivo) throw Error('El balance diario no admite retroceder la fecha.');
     // Reemplaza únicamente proyecciones de bloques completos nuevos, sin duplicarlas.
+    const blocks = Math.floor((dayMs(fecha)-dayMs(refreshed))/(5*DAY));
+    let completedBlocks = 0;
     while (dayMs(fecha)-dayMs(refreshed) >= 5*DAY) {
       const end = nextDay(refreshed,5);
       const growth = await predict({ nombre_potrero:potrero.nombre, geojson:potrero.geom, fecha:end,
-        consumo_diario_total_kg_ms:0, dias_actualizacion:5 });
+        consumo_diario_total_kg_ms:0, dias_actualizacion:5 }, value => onProgress((completedBlocks * 100 + value) / blocks));
+      completedBlocks += 1;
       ledger = ledger.filter(d=>d.fecha<=refreshed).concat(rowsFromCalculation(growth));
       observations.push({fecha:end,detalle_dmp:growth.dmp,referencias:growth.referencias_regionales,supuesto_uso_ganadero:growth.supuesto_uso_ganadero,respaldo_estimacion:growth.respaldo_estimacion});
       result.respaldo_estimacion = growth.respaldo_estimacion;
