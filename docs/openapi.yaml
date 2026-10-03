@@ -242,7 +242,7 @@ paths:
                 nombre: { type: string }
                 departamento: { type: string, nullable: true }
                 provincia: { type: string, nullable: true }
-                superficie_total_ha: { type: number, format: double, nullable: true }
+                superficie_total_ha: { type: number, format: double, nullable: true, minimum: 0.01, maximum: 99999999.99 }
                 geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
       responses:
         "201":
@@ -306,7 +306,7 @@ paths:
                 nombre: { type: string }
                 departamento: { type: string, nullable: true }
                 provincia: { type: string, nullable: true }
-                superficie_total_ha: { type: number, format: double, nullable: true }
+                superficie_total_ha: { type: number, format: double, nullable: true, minimum: 0.01, maximum: 99999999.99 }
                 geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
       responses:
         "200":
@@ -385,7 +385,7 @@ paths:
               properties:
                 nombre: { type: string }
                 descripcion: { type: string, nullable: true }
-                superficie_ha: { type: number, format: double, nullable: true }
+                superficie_ha: { type: number, format: double, nullable: true, minimum: 0.01, maximum: 99999999.99 }
                 activo: { type: boolean, default: true }
                 geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
       responses:
@@ -576,7 +576,8 @@ paths:
       description: >-
         Si se envía `geom`, se revalida contra `ST_Within` (dentro de la
         estancia) y `ST_Intersects` (sin solape con otro potrero, excluyéndose
-        a sí mismo).
+        a sí mismo). `activo` no se admite en esta operación: la baja se
+        realiza con DELETE y el cierre operativo con PATCH /potrero/{potreroId}/uso.
       requestBody:
         content:
           application/json:
@@ -585,8 +586,7 @@ paths:
               properties:
                 nombre: { type: string }
                 descripcion: { type: string, nullable: true }
-                superficie_ha: { type: number, format: double, nullable: true }
-                activo: { type: boolean }
+                superficie_ha: { type: number, format: double, nullable: true, minimum: 0.01, maximum: 99999999.99 }
                 geom: { $ref: "#/components/schemas/GeoJSONPolygon" }
       responses:
         "200":
