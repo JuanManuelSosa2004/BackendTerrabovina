@@ -5,11 +5,11 @@ const { sequelize } = require('../sequelize');
 
 const SELECT_FIELDS = 'id_dato, id_potrero, fuente, fecha, temperatura, precipitacion, humedad, created_at';
 
-async function getUltimoByPotrero(id_potrero) {
+async function getUltimoByPotrero(id_potrero, transaction) {
   const rows = await sequelize.query(
     `SELECT ${SELECT_FIELDS} FROM \`dato_climatico\`
      WHERE id_potrero = :id_potrero ORDER BY fecha DESC, id_dato DESC LIMIT 1`,
-    { replacements: { id_potrero }, type: QueryTypes.SELECT }
+    { replacements: { id_potrero }, type: QueryTypes.SELECT, transaction }
   );
   return rows[0] ?? null;
 }

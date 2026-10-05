@@ -270,9 +270,11 @@ function iniciarStock(id_potrero, fecha = fechaLocalActual(), refreshDmi = false
       onProgress: value => onProgress(3 + value * 0.9),
     });
     onProgress(95);
-    const estimacion = await sequelize.transaction(transaction =>
-      estimacionStockRepository.crear(stockPersistible(id_potrero, dmi, resultado), transaction)
-    );
+    const estimacion = await sequelize.transaction(async transaction => {
+      const saved = await estimacionStockRepository.crear(stockPersistible(id_potrero, dmi, resultado), transaction);
+      await require('../services/stockClimate.service').persistStockClimate(id_potrero, resultado, transaction, datoClimaticoRepository);
+      return saved;
+    });
     return { ...estimacion, demanda_utilizada: dmi };
   }, refreshDmi);
 }

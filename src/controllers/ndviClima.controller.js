@@ -35,7 +35,7 @@ async function getDatoClimaVigente(req, res) {
   const dato = await datoClimaticoRepository.getUltimoByPotrero(req.potrero.id_potrero);
   if (!dato) {
     return res.status(404).json({
-      error: 'No hay dato climático todavía. Ejecute POST .../estimacion-forrajera para generar uno.',
+      error: 'Todavía no hay datos climáticos guardados. Se incorporan cuando el cálculo de stock obtiene información climática.',
     });
   }
   return res.json(dato);
