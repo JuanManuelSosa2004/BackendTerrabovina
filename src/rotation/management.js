@@ -49,7 +49,8 @@ function buildGroups(animals,management){
     const key=`auto:${a.origin}:${a.categoria}`;
     if(!automatic.has(key))automatic.set(key,[]);automatic.get(key).push(a);
   }
-  for(const [id,members] of automatic)add({id,name:members[0].categoria,allowSplit:!!management.split?.[id]},members,false);
+  const labels={TERNERO:'Terneros',VAQUILLONA:'Vaquillonas',NOVILLO:'Novillos',VACA:'Vacas',TORO:'Toros'};
+  for(const [id,members] of automatic)add({id,name:labels[members[0].categoria]||members[0].categoria,allowSplit:!!management.split?.[id]},members,false);
   return groups;
 }
 async function get(id,t){
