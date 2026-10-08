@@ -8,6 +8,8 @@ const handle=fn=>async(req,res)=>{try{res.json(await fn(Number(req.params.estanc
 router.get('/',handle(id=>S.getState(id)));
 router.put('/availability',handle((id,r)=>S.saveAvailability(id,r.body)));
 router.post('/refresh',handle(id=>S.refresh(id)));
+router.get('/management',handle(id=>require('./management').get(id)));
+router.put('/management',handle((id,r)=>require('./management').save(id,r.body)));
 // Saved detailed plans remain in the database for recovery, but cannot execute
 // through a stale browser after switching to recommendations by quantity.
 router.use((req,res)=>res.status(410).json({error:'Rotación ahora recomienda cantidades por potrero. Recargá la pantalla.'}));

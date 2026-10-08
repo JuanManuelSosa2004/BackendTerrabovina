@@ -160,13 +160,20 @@ async function crearEstimacionNutricional(req, res) {
 
   const kg_materia_seca_dia = prediccion.predicciones.reduce((total, p) => total + Number(p.dmi_kg_dia || 0), 0);
 
-  const estimacion = await estimacionDemandaRepository.crear({
+  const estimacion = await sequelize.transaction(async t=>{
+    await sequelize.query('SELECT id_potrero FROM potrero WHERE id_potrero=:id FOR UPDATE',{replacements:{id:id_potrero},transaction:t});
+    const current=await ganadoRepository.getGanadoByPotrero(id_potrero,t);
+    const {hash,animalHash,fail}=require('../rotation/rules');
+    if(hash(current.map(animalHash))!==hash(ganado.map(animalHash)))fail('El ganado cambió durante el cálculo. Actualizá nuevamente.',409);
+    await require('../rotation/management').cacheDemand(ganado,prediccion,t);
+    return estimacionDemandaRepository.crear({
     id_potrero,
     fecha_calculo: toMysqlDatetimeUtc(new Date()),
     cantidad_animales: ganado.length,
     kg_materia_seca_dia: Number(kg_materia_seca_dia.toFixed(2)),
     version_modelo: VERSION_DMI,
     nivel_confianza: null,
+    },t);
   });
 
   return res.status(201).json({

@@ -78,6 +78,10 @@ async function crear(req, res) {
 
   try {
     const id_traslado = await sequelize.transaction(async (t) => {
+      await require('../rotation/paddockService').checkTransfer(Number(id_estancia),{
+        origin:Number(id_potrero_origen),destination:Number(id_potrero_destino),
+        animalIds:idsGanado.map(Number),recommendation:req.body.recommendation===true,
+      },t);
       const destino = await getPotreroDestinoDeUsuario(id_potrero_destino, req.usuario.id_usuario, t);
       if (!destino || destino.id_estancia !== id_estancia) {
         const err = new Error('El potrero destino no existe o no pertenece a la misma estancia.');
@@ -134,8 +138,8 @@ async function crear(req, res) {
     const resultado = await trasladoGanadoRepository.getTrasladoConDetalleById(id_traslado);
     return res.status(201).json(resultado);
   } catch (error) {
-    if (error.status === 400) {
-      return res.status(400).json({ error: error.message });
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
     }
     throw error;
   }

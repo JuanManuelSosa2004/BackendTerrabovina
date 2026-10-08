@@ -12,14 +12,14 @@ async function configuration(id,t) {
   return row ? {revision:row.revision, data:decode(row.datos)} : {revision:0,data:{}};
 }
 
-async function paddocks(id) {
+async function paddocks(id,t) {
   return rows(`SELECT p.id_potrero AS id,p.nombre AS name,p.habilitado_ganado,p.superficie_ha AS area,ST_AsGeoJSON(p.geom) AS geometry,
     (SELECT COUNT(*) FROM asignacion_ganado a JOIN ganado g ON g.id_ganado=a.id_ganado
       WHERE a.id_potrero=p.id_potrero AND a.fecha_hasta IS NULL AND g.activo=1 AND a.fecha_desde<=:date) AS animals,
     (SELECT MAX(a.updated_at) FROM asignacion_ganado a WHERE a.id_potrero=p.id_potrero) AS assignment_changed,
     (SELECT MAX(g.updated_at) FROM ganado g JOIN asignacion_ganado a ON a.id_ganado=g.id_ganado
       WHERE a.id_potrero=p.id_potrero AND a.fecha_hasta IS NULL) AS cattle_changed
-    FROM potrero p WHERE p.id_estancia=:id AND p.activo=1 ORDER BY p.id_potrero`,{id,date:today()});
+    FROM potrero p WHERE p.id_estancia=:id AND p.activo=1 ORDER BY p.id_potrero`,{id,date:today()},t);
 }
 
 function aggregate(p,stock,dmi,revision,included,job) {
@@ -66,18 +66,23 @@ function aggregate(p,stock,dmi,revision,included,job) {
     accessible:!!revision,job:{estado:job.estado,error:job.error??null}};
 }
 
-async function getState(id) {
-  const config=await configuration(id), ps=await paddocks(id);
+async function inputsFor(id,t) {
+  const config=await configuration(id,t), ps=await paddocks(id,t);
   const excluded=new Set(config.data.simple?.excluded||[]);
   const inputs=[];
   for(const p of ps) {
     const [stock,dmi,revisions]=await Promise.all([
-      require('../database/sql/estimacionStock.repository').getUltimaByPotrero(p.id),
-      require('../database/sql/estimacionDemanda.repository').getUltimaByPotrero(p.id),
-      rows('SELECT * FROM intrapotrero_version WHERE id_potrero=:id ORDER BY id DESC LIMIT 1',{id:p.id})]);
-    inputs.push(aggregate(p,stock,dmi,revisions[0],!excluded.has(Number(p.id)),require('../services/stockJobs').get(p.id)));
+      require('../database/sql/estimacionStock.repository').getUltimaByPotrero(p.id,t),
+      require('../database/sql/estimacionDemanda.repository').getUltimaByPotrero(p.id,t),
+      rows('SELECT * FROM intrapotrero_version WHERE id_potrero=:id ORDER BY id DESC LIMIT 1',{id:p.id},t)]);
+    inputs.push({...aggregate(p,stock,dmi,revisions[0],!excluded.has(Number(p.id)),require('../services/stockJobs').get(p.id)),management:config.data.management?.paddocks?.[p.id]||{}});
   }
-  return {...await recommend(inputs),revision:config.revision,date:today(),start:day(today(),1),
+  const {groups}=await require('./management').get(id,t);
+  return {paddocks:inputs,groups,revision:config.revision};
+}
+async function getState(id) {
+  const {paddocks:inputs,groups,revision}=await inputsFor(id);
+  return {...await recommend(inputs,groups),revision,date:today(),start:day(today(),1),
     refreshing:inputs.some(p=>p.job.estado==='EJECUTANDO')};
 }
 
@@ -102,4 +107,13 @@ async function refresh(id) {
   const jobs=ps.map(p=>({id:p.id,estado:require('../controllers/estimacion.controller').iniciarStock(p.id,today(),Number(p.animals)>0).estado}));
   return {jobs};
 }
-module.exports={getState,saveAvailability,refresh,aggregate};
+async function checkTransfer(id,transfer,t){
+  // Serialize with configuration edits and lock the rows used by assignments,
+  // cattle edits and paddock closures until validation and transfer commit.
+  await rows('SELECT id_estancia FROM estancia WHERE id_estancia=:id FOR UPDATE',{id},t);
+  await rows('SELECT id_potrero FROM potrero WHERE id_estancia=:id ORDER BY id_potrero FOR UPDATE',{id},t);
+  await rows('SELECT id_ganado FROM ganado WHERE id_estancia=:id ORDER BY id_ganado FOR UPDATE',{id},t);
+  const input=await inputsFor(id,t);
+  return require('./paddockEngine').validateTransfer({...input,transfer});
+}
+module.exports={getState,saveAvailability,refresh,aggregate,inputsFor,checkTransfer};

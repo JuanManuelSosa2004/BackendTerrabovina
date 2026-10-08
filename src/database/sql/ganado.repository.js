@@ -106,7 +106,7 @@ async function getGanadoByEstancia(id_estancia) {
 }
 
 // #22: sólo el ganado con asignación vigente en ese potrero.
-async function getGanadoByPotrero(id_potrero) {
+async function getGanadoByPotrero(id_potrero,transaction) {
   return sequelize.query(
     `SELECT ${BASE_SELECT} FROM \`ganado\`
      JOIN \`asignacion_ganado\` asignacion_activa
@@ -114,7 +114,7 @@ async function getGanadoByPotrero(id_potrero) {
      JOIN \`potrero\` potrero_actual ON potrero_actual.id_potrero = asignacion_activa.id_potrero
      WHERE asignacion_activa.id_potrero = :id_potrero AND ganado.activo = TRUE
      ORDER BY ganado.numero_identificacion`,
-    { replacements: { id_potrero }, type: QueryTypes.SELECT }
+    { replacements: { id_potrero }, type: QueryTypes.SELECT,transaction }
   );
 }
 
