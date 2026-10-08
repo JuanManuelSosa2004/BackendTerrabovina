@@ -78,6 +78,10 @@ async function inputsFor(id,t) {
     inputs.push({...aggregate(p,stock,dmi,revisions[0],!excluded.has(Number(p.id)),require('../services/stockJobs').get(p.id)),management:config.data.management?.paddocks?.[p.id]||{}});
   }
   const {groups}=await require('./management').get(id,t);
+  for(const p of inputs){
+    const groupIssues=groups.filter(g=>g.origin===p.id).flatMap(g=>g.issues);
+    p.issues=[...new Set([...p.issues,...groupIssues])];
+  }
   return {paddocks:inputs,groups,revision:config.revision};
 }
 async function getState(id) {
