@@ -3,6 +3,16 @@ const {recommend}=require('../src/rotation/paddockEngine');
 const response={version:'rotacion_por_potrero_v3',engineRuntime:'python',priorityModel:'prioridad_sugeno_v1',horizon:7,
  paddocks:[],recommendations:[],partial:false,totals:{excessPaddocks:0,closedPaddocks:0,toMove:0,allocated:0,pending:0}};
 
+test('accepts arrival-reserve group engine and prior compatible version during rollout',async t=>{
+ const old=process.env.MODEL_API_BASE_URL;process.env.MODEL_API_BASE_URL='http://flask:5000';
+ t.after(()=>old===undefined?delete process.env.MODEL_API_BASE_URL:process.env.MODEL_API_BASE_URL=old);
+ let version='rotacion_grupos_v2';
+ t.mock.method(global,'fetch',async()=>({ok:true,json:async()=>({...response,version,arrivalReserveDays:1})}));
+ assert.equal((await recommend([],[])).arrivalReserveDays,1);
+ version='rotacion_grupos_v1';assert.equal((await recommend([],[])).version,version);
+ version='unknown';await assert.rejects(()=>recommend([],[]),{status:503});
+});
+
 test('calls only the Flask recommendation endpoint and returns its result',async t=>{
  const old=process.env.MODEL_API_BASE_URL;process.env.MODEL_API_BASE_URL='http://flask:5000/';
  t.after(()=>old===undefined?delete process.env.MODEL_API_BASE_URL:process.env.MODEL_API_BASE_URL=old);

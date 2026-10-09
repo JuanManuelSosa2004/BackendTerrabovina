@@ -18,7 +18,9 @@ async function recommend(paddocks,groups) {
     if (!response.ok) throw unavailable();
     const result = await response.json();
     const ids = new Set(paddocks.map(p=>p.id));
-    if (result?.version !== (groups?'rotacion_grupos_v1':'rotacion_por_potrero_v3') || result.engineRuntime !== 'python' ||
+    const supportedVersion = groups ? ['rotacion_grupos_v1','rotacion_grupos_v2'].includes(result?.version)
+      : result?.version === 'rotacion_por_potrero_v3';
+    if (!supportedVersion || result.engineRuntime !== 'python' ||
         result.priorityModel !== 'prioridad_sugeno_v1' || result.horizon !== 7 ||
         !Array.isArray(result.paddocks) || result.paddocks.length !== paddocks.length ||
         new Set(result.paddocks.map(p=>p.id)).size !== ids.size || result.paddocks.some(p=>!ids.has(p.id)) ||
