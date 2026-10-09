@@ -64,6 +64,9 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.too.large') {
     return res.status(413).json({ error: 'El cuerpo de la solicitud supera el tamaño permitido.' });
   }
+  if (Number.isInteger(err.status) && err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ error: err.message });
+  }
   console.error(err);
   res.status(500).json({ error: 'Error interno del servidor.' });
 });

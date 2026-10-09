@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 let writes=0;
 const stub=(path,exports)=>{const id=require.resolve(path);require.cache[id]={id,filename:id,loaded:true,exports};};
-stub('../src/database/sequelize',{sequelize:{transaction:async fn=>fn({})}});
+stub('../src/database/sequelize',{sequelize:{transaction:async (...args)=>args.at(-1)({})}});
 stub('../src/database/sql/ganado.repository',{
  getGanadoById:async()=>({id_ganado:1,categoria:'TERNERO',sexo:'M',peso_kg:90}),
  createGanado:async()=>{writes++;},updateGanado:async()=>{writes++;},

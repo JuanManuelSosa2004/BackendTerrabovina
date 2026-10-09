@@ -85,8 +85,17 @@ function predictDmp({ nombre_potrero, geojson }) {
  *   predicciones: Array<{ animal_id: string, dmi_kg_dia: number, dmi_pct_peso_vivo: number }>,
  * }>}
  */
-function predictDmi({ animales }) {
-  return postJson('/predict/dmi', { animales });
+async function predictDmi({ animales }) {
+  // Flask caps an inference request at 1000 animals. A paddock can contain
+  // more than one intake batch; preserve every result and fail atomically.
+  if (!Array.isArray(animales) || animales.length <= 1000) return postJson('/predict/dmi', { animales });
+  const predicciones=[],advertencias=[];
+  for(let i=0;i<animales.length;i+=1000){
+    const result=await postJson('/predict/dmi',{animales:animales.slice(i,i+1000)});
+    if(!Array.isArray(result.predicciones))throw new ModeloPredictivoError('El modelo devolvió consumos incompletos.');
+    predicciones.push(...result.predicciones);advertencias.push(...(result.advertencias||[]));
+  }
+  return {predicciones,advertencias:[...new Set(advertencias)]};
 }
 
 async function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms, geojson, dias_actualizacion }, onProgress) {

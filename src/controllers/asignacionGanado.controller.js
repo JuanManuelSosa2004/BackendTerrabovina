@@ -38,7 +38,7 @@ async function crear(req, res) {
   }
 
   try {
-    const asignaciones = await sequelize.transaction(async (t) => {
+    const asignaciones = await sequelize.transaction({isolationLevel:'READ COMMITTED'},async (t) => {
       const potrero = await getPotreroDeUsuario(id_potrero, req.usuario.id_usuario, t);
       if (!potrero) {
         const err = new Error('El potrero indicado no existe.');
@@ -48,6 +48,16 @@ async function crear(req, res) {
 
       const resultados = [];
       const hoy = require('../utils/diasPrevios').fechaIngreso();
+
+      await require('../rotation/placement').lockFarm(potrero.id_estancia,t);
+      const candidates=[];
+      for(const id of idsGanado){
+        const a=await require('../database/sql/ganado.repository').getGanadoById(id,t);
+        if(!a||!a.activo||Number(a.id_estancia)!==Number(potrero.id_estancia))throw Object.assign(Error('El ganado no pertenece a la estancia.'),{status:400});
+        candidates.push(a);
+      }
+      if(new Set(idsGanado.map(Number)).size!==idsGanado.length)throw Object.assign(Error('El ganado no debe repetirse.'),{status:400});
+      await require('../rotation/placement').checkPlacement(potrero.id_estancia,id_potrero,candidates,t,{locked:true});
 
       for (const id_ganado of idsGanado) {
         const ganado = await getGanadoDeEstancia(id_ganado, potrero.id_estancia, t);
@@ -78,8 +88,8 @@ async function crear(req, res) {
 
     return res.status(201).json(Array.isArray(req.body.id_ganado) ? asignaciones : asignaciones[0]);
   } catch (error) {
-    if (error.status === 400) {
-      return res.status(400).json({ error: error.message });
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
     }
     throw error;
   }

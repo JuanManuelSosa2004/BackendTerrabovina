@@ -119,6 +119,7 @@ async function createEnPotrero(req, res) {
 
   try {
     const ganado = await sequelize.transaction(async (t) => {
+      await require('../rotation/placement').checkPlacement(id_estancia,id_potrero,[{...req.body,id_ganado:null}],t);
       const secuencial = (await asignacionGanadoRepository.countGanadoHistoricoByPotrero(id_potrero, t)) + 1;
       const numero_identificacion = `${id_estancia}-${id_potrero}-${secuencial}`;
 
@@ -153,7 +154,7 @@ async function createEnPotrero(req, res) {
       // el cliente puede simplemente reintentar la solicitud.
       return res.status(409).json({ error: 'Colisión generando numero_identificacion, reintente la solicitud.' });
     }
-    if (error.status === 400) return res.status(400).json({error:error.message});
+    if (error.status) return res.status(error.status).json({error:error.message});
     throw error;
   }
 }
@@ -191,9 +192,19 @@ async function update(req, res) {
   }
 
   try {
-    const ganado = await ganadoRepository.updateGanado(req.ganado.id_ganado, fields);
+    const ganado = await sequelize.transaction(async t=>{
+      if(fields.categoria!==undefined||fields.sexo!==undefined){
+        await require('../rotation/placement').lockFarm(req.ganado.id_estancia,t);
+        const actual=await ganadoRepository.getGanadoById(req.ganado.id_ganado,t);
+        const error=validarCamposGanado({...actual,...fields},{requiereNumeroIdentificacion:false});
+        if(error)throw Object.assign(Error(error),{status:400});
+        if(actual.id_potrero_actual)await require('../rotation/placement').checkPlacement(actual.id_estancia,actual.id_potrero_actual,[{...actual,...fields}],t,{locked:true});
+      }
+      return ganadoRepository.updateGanado(req.ganado.id_ganado,fields,t);
+    });
     return res.json(ganado);
   } catch (error) {
+    if(error.status)return res.status(error.status).json({error:error.message});
     if (isDuplicateEntryError(error)) {
       return res.status(409).json({ error: 'Ya existe un animal con ese numero_identificacion.' });
     }
@@ -245,7 +256,7 @@ async function updateMultiple(req, res) {
   const noEncontrados = [];
 
   try {
-    const actualizados = await sequelize.transaction(async (t) => {
+    const actualizados = await sequelize.transaction({isolationLevel:'READ COMMITTED'},async (t) => {
       for (const id_ganado of fieldsById.keys()) {
         const ganado = await ganadoRepository.getGanadoDeUsuario(id_ganado, req.usuario.id_usuario, t);
         if (!ganado) noEncontrados.push(id_ganado);
@@ -267,6 +278,24 @@ async function updateMultiple(req, res) {
         }
       }
 
+      const categoryEdits=[];
+      for(const [id,fields] of fieldsById)if(fields.categoria!==undefined||fields.sexo!==undefined)categoryEdits.push({id,fields});
+      if(categoryEdits.length){
+        const first=await ganadoRepository.getGanadoById(categoryEdits[0].id,t);
+        await require('../rotation/placement').lockFarm(first.id_estancia,t);
+        const byPaddock=new Map();
+        for(const {id,fields} of categoryEdits){
+          const actual=await ganadoRepository.getGanadoById(id,t);
+          const error=validarCamposGanado({...actual,...fields},{requiereNumeroIdentificacion:false});
+          if(error)throw Object.assign(Error(error),{status:400});
+          if(actual.id_potrero_actual){
+            const key=actual.id_potrero_actual;
+            if(!byPaddock.has(key))byPaddock.set(key,[]);
+            byPaddock.get(key).push({...actual,...fields});
+          }
+        }
+        for(const [pid,candidates] of byPaddock)await require('../rotation/placement').checkPlacement(first.id_estancia,pid,candidates,t,{locked:true});
+      }
       const resultados = [];
       for (const [id_ganado, fields] of fieldsById) {
         resultados.push(await ganadoRepository.updateGanado(id_ganado, fields, t));
@@ -279,8 +308,8 @@ async function updateMultiple(req, res) {
     if (error.status === 404) {
       return res.status(404).json({ error: error.message, noEncontrados });
     }
-    if (error.status === 400) {
-      return res.status(400).json({ error: error.message });
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
     }
     if (isDuplicateEntryError(error)) {
       return res.status(409).json({ error: 'Ya existe un animal con ese numero_identificacion.' });
@@ -348,7 +377,7 @@ async function createLoteEnPotrero(req,res) {
       validate:validarCamposGanado,entryDate:require('../utils/diasPrevios').fechaIngreso,
       predict:require('../services/modeloPredictivo.client').predictDmi,mapAnimal:estimation.aAnimalDelModelo,
       transaction:fn=>sequelize.transaction(fn),
-      lock:(id,t)=>sequelize.query('SELECT id_potrero FROM potrero WHERE id_potrero = :id FOR UPDATE',{replacements:{id},transaction:t}),
+      lock:(id,t)=>require('../rotation/placement').checkPlacement(req.potrero.id_estancia,id,req.body.animales.map(a=>({...a,id_ganado:null})),t),
       count:asignacionGanadoRepository.countGanadoHistoricoByPotrero,create:ganadoRepository.createGanado,
       assign:asignacionGanadoRepository.crearAsignacion,refresh:estimation.iniciarStock,
     });
