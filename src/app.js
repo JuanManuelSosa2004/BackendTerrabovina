@@ -2,7 +2,8 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
-const YAML = require('yamljs');
+const fs = require('node:fs');
+const YAML = require('yaml');
 
 const app = express();
 
@@ -43,7 +44,7 @@ app.use('/api/v2/traslado-ganado', require('./routes/trasladoGanado.routes'));
 // el archivo falta o no parsea, se loguea y se sigue sin montar /docs — la
 // documentación nunca debe poder tirar abajo la API real.
 try {
-  const openapiSpec = YAML.load(path.join(__dirname, '..', 'docs', 'openapi.yaml'));
+  const openapiSpec = YAML.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'openapi.yaml'), 'utf8'));
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 } catch (error) {
   console.error('No se pudo cargar docs/openapi.yaml, /docs no estará disponible:', error.message);
