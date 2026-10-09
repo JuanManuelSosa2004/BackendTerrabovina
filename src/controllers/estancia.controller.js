@@ -191,6 +191,7 @@ async function getPotrerosFueraDeGeom(idEstancia, polygon) {
     `SELECT id_potrero, nombre
      FROM \`potrero\`
      WHERE id_estancia = :idEstancia
+       AND activo = TRUE
        AND geom IS NOT NULL
        AND NOT ST_Within(geom, ST_GeomFromGeoJSON(:geojson, 1, 4326))`,
     { replacements: { idEstancia, geojson: JSON.stringify(polygon) }, type: QueryTypes.SELECT }
