@@ -15,11 +15,12 @@ test('AWS retries transient model failures only on the companion container', asy
   const { predictDmi } = require('../src/services/modeloPredictivo.client');
   const calls = [];
   let gatewayStatus = 503;
+  let gatewayBody = '{}';
   t.mock.method(global, 'fetch', async (url, options) => {
     calls.push(url.origin);
     if (url.origin === process.env.MODEL_GATEWAY_URL) {
       assert.match(options.headers.authorization, /^AWS4-HMAC-SHA256 /);
-      return new Response('{}', { status: gatewayStatus });
+      return new Response(gatewayBody, { status: gatewayStatus });
     }
     assert.equal(options.headers.authorization, undefined);
     return new Response('{"predicciones":[]}');
@@ -29,5 +30,10 @@ test('AWS retries transient model failures only on the companion container', asy
   gatewayStatus = 422;
   calls.length = 0;
   await assert.rejects(predictDmi({ animales: [] }), error => error.status === 422);
+  assert.deepEqual(calls, [process.env.MODEL_GATEWAY_URL]);
+  gatewayStatus = 502;
+  gatewayBody = '{"estado":"NO_CALCULABLE"}';
+  calls.length = 0;
+  await assert.rejects(predictDmi({ animales: [] }), error => error.status === 502);
   assert.deepEqual(calls, [process.env.MODEL_GATEWAY_URL]);
 });

@@ -83,9 +83,17 @@ async function postInference(path, body) {
   const gateway = process.env.MODEL_GATEWAY_URL;
   if (!gateway) return postJson(path, body);
   try {
-    return await postJson(path, body, Math.min(TIMEOUT_MS, 6000), gateway);
+    // DMP also fetches climate and satellite data. Its warm request can take
+    // around ten seconds; leave room for both attempts within the API timeout.
+    const gatewayTimeout = path === '/predict/dmp' ? 12000 : 6000;
+    return await postJson(path, body, Math.min(TIMEOUT_MS, gatewayTimeout), gateway);
   } catch (error) {
     if (error.status && error.status !== 429 && error.status < 500) throw error;
+    if (error.status === 502 && error.detail) {
+      let result;
+      try { result = JSON.parse(error.detail); } catch { /* Gateway returned a non-JSON error. */ }
+      if (result?.estado === 'NO_CALCULABLE') throw error;
+    }
     if (BASE_URL !== 'http://127.0.0.1:5000') throw error;
     console.warn('Lambda unavailable for', path, 'using the local copy of the model');
     return postJson(path, body);
