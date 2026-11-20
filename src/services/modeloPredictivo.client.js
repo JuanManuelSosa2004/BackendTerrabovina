@@ -77,6 +77,21 @@ async function postJson(path, body, timeoutMs = TIMEOUT_MS, gateway = '') {
   }
 }
 
+// The Fargate task runs the same immutable model image as Lambda. Give a cold
+// Lambda a bounded head start, leaving time to serve inference from the warm task.
+async function postInference(path, body) {
+  const gateway = process.env.MODEL_GATEWAY_URL;
+  if (!gateway) return postJson(path, body);
+  try {
+    return await postJson(path, body, Math.min(TIMEOUT_MS, 6000), gateway);
+  } catch (error) {
+    if (error.status && error.status !== 429 && error.status < 500) throw error;
+    if (BASE_URL !== 'http://127.0.0.1:5000') throw error;
+    console.warn('Lambda unavailable for', path, 'using the local copy of the model');
+    return postJson(path, body);
+  }
+}
+
 /**
  * @param {{ nombre_potrero: string, geojson: object }} input
  * @returns {Promise<{
@@ -87,7 +102,7 @@ async function postJson(path, body, timeoutMs = TIMEOUT_MS, gateway = '') {
  * }>}
  */
 function predictDmp({ nombre_potrero, geojson }) {
-  return postJson('/predict/dmp', { nombre_potrero, geojson }, TIMEOUT_MS, process.env.MODEL_GATEWAY_URL);
+  return postInference('/predict/dmp', { nombre_potrero, geojson });
 }
 
 /**
@@ -98,7 +113,7 @@ function predictDmp({ nombre_potrero, geojson }) {
  * }>}
  */
 function predictDmi({ animales }) {
-  return postJson('/predict/dmi', { animales }, TIMEOUT_MS, process.env.MODEL_GATEWAY_URL);
+  return postInference('/predict/dmi', { animales });
 }
 
 async function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms, geojson, dias_actualizacion }) {

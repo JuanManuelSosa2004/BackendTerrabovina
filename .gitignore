@@ -1,5 +1,18 @@
 node_modules/
 .env
+.env.*
+!.env.example
+*.sql.gz
+*.dump
+*.partial
+snapshot.sql
+manifest.json
+verification.sql
+terrabovina-upload-*.json
+terrabovina-transfer-*.json
+terrabovina-deploy-*.json
+*.pfx
+*.key
 
 .claude/
 # app.js carga este archivo en runtime para servir /docs (Swagger UI): no

@@ -56,8 +56,11 @@ def template(db, cluster, backend_image, model_image, domain="aws.terrabovina.co
     r["LambdaRole"] = iam("lambda.amazonaws.com", [allow(["logs:CreateLogStream", "logs:PutLogEvents"], attr("ModelLog", "Arn"))])
     r["Model"] = resource("Lambda::Function", FunctionName="terrabovina-aws-modelos", Role=attr("LambdaRole", "Arn"),
                           PackageType="Image", Code={"ImageUri": model_image}, Architectures=["x86_64"],
-                          Timeout=30, MemorySize=2048, EphemeralStorage={"Size": 1024},
-                          Environment={"Variables": {"PORT": "5000", "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"}})
+                          ImageConfig={"WorkingDirectory": "/app"},
+                          Timeout=90, MemorySize=3008, EphemeralStorage={"Size": 1024},
+                          Environment={"Variables": {"PORT": "5000", "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1",
+                            "HOME": "/tmp", "TMPDIR": "/tmp", "XDG_CACHE_HOME": "/tmp", "JOBLIB_MULTIPROCESSING": "0",
+                            "GUNICORN_CMD_ARGS": "--worker-tmp-dir /tmp", "AWS_LWA_ASYNC_INIT": "true"}})
     r["ModelApi"] = endpoint("modelos")
     r["ModelStage"] = stage("ModelApi")
     r["ModelIntegration"] = resource("ApiGatewayV2::Integration", ApiId=ref("ModelApi"), IntegrationType="AWS_PROXY",

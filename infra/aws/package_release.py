@@ -9,7 +9,8 @@ def package(destination):
     root = Path(__file__).resolve().parents[3]
     inputs = {
         "backend": ["Dockerfile", ".dockerignore", "package.json", "package-lock.json",
-                    "src", "docs/openapi.yaml", "infra/aws"],
+                    "src", "docs/openapi.yaml", "infra/aws/artifacts.yaml", "infra/aws/build.yaml",
+                    "infra/aws/buildspec.yaml", "infra/aws/database.yaml", "infra/aws/us-east-1-bundle.pem"],
         "modelos": ["Dockerfile", ".dockerignore", "requirements.txt", "app.py", "validation.py",
                     "intrapaddock.py", "intrapaddock_water.py", "intrapaddock_climate.py",
                     "stock", "rotation", "modelo_final DMP/src", "modelo_final DMP/models",
