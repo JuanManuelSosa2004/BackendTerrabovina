@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Build the isolated backend and model images from a pinned S3 source package.
+Parameters:
+  StagingBucket: {Type: String}
+  SourceKey: {Type: String, AllowedPattern: 'builds/[a-z0-9-]+/source\.zip'}
+  ReleaseTag: {Type: String, AllowedPattern: '[a-z0-9-]{1,96}'}
+Resources:
+  Log:
+    Type: AWS::Logs::LogGroup
+    Properties: {RetentionInDays: 7}
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: codebuild.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: {'aws:SourceAccount': !Ref 'AWS::AccountId'}
+              ArnEquals: {'aws:SourceArn': !Sub 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/terrabovina-aws-build'}
+      Policies:
+        - PolicyName: BuildImages
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt Log.Arn
+              - Effect: Allow
+                Action: [s3:GetBucketLocation, s3:GetBucketAcl]
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${StagingBucket}'
+              - Effect: Allow
+                Action: [s3:GetObject, s3:GetObjectVersion]
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${StagingBucket}/${SourceKey}'
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action: [ecr:BatchGetImage, ecr:BatchCheckLayerAvailability, ecr:GetDownloadUrlForLayer, ecr:InitiateLayerUpload, ecr:UploadLayerPart, ecr:CompleteLayerUpload, ecr:PutImage, ecr:DescribeImages]
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/terrabovina-aws/backend'
+                  - !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/terrabovina-aws/modelos'
+  Builder:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: terrabovina-aws-build
+      ServiceRole: !GetAtt Role.Arn
+      Artifacts: {Type: NO_ARTIFACTS}
+      ConcurrentBuildLimit: 1
+      TimeoutInMinutes: 35
+      Source:
+        Type: S3
+        Location: !Sub '${StagingBucket}/${SourceKey}'
+        BuildSpec: backend/infra/aws/buildspec.yaml
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - {Name: RELEASE_TAG, Value: !Ref ReleaseTag}
+          - {Name: REGISTRY, Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.${AWS::URLSuffix}'}
+      LogsConfig:
+        CloudWatchLogs: {Status: ENABLED, GroupName: !Ref Log}

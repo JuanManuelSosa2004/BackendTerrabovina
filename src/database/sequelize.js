@@ -8,6 +8,7 @@ const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.p
   host: dbConfig.host,
   port: dbConfig.port,
   dialect: dbConfig.dialect,
+  dialectOptions: dbConfig.dialectOptions,
   timezone: dbConfig.timezone,
   logging: dbConfig.logging === false ? false : env === 'development' ? console.log : false,
   define: dbConfig.define,

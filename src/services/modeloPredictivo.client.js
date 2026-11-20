@@ -13,9 +13,8 @@
  *  - POST /predict/dmi: recibe un lote de animales y devuelve, por
  *    animal, el consumo de materia seca estimado (demanda nutricional).
  *
- * Sin autenticación por ahora (confirmado con el equipo). Si en algún
- * momento la API pide un header/API key, es el único lugar que hay que
- * tocar.
+ * En AWS, DMI y DMP usan el rol de Fargate para autenticarse en API Gateway.
+ * Los análisis largos se ejecutan en Flask dentro de la misma tarea.
  */
 
 const BASE_URL = (process.env.MODEL_API_BASE_URL || '').replace(/\/$/, '');
@@ -33,8 +32,9 @@ class ModeloPredictivoError extends Error {
   }
 }
 
-async function postJson(path, body, timeoutMs = TIMEOUT_MS) {
-  if (!BASE_URL) {
+async function postJson(path, body, timeoutMs = TIMEOUT_MS, gateway = '') {
+  const baseUrl = gateway || BASE_URL;
+  if (!baseUrl) {
     throw new ModeloPredictivoError('MODEL_API_BASE_URL no está configurada.');
   }
 
@@ -42,10 +42,22 @@ async function postJson(path, body, timeoutMs = TIMEOUT_MS) {
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`${BASE_URL}${path}`, {
+    const url = new URL(path, baseUrl);
+    const payload = JSON.stringify(body);
+    let headers = { 'Content-Type': 'application/json' };
+    if (gateway) {
+      const { SignatureV4 } = require('@smithy/signature-v4');
+      const { fromContainerMetadata } = require('@aws-sdk/credential-providers');
+      const { Sha256 } = require('@aws-crypto/sha256-js');
+      const signer = new SignatureV4({ service: 'execute-api', region: 'us-east-1', credentials: fromContainerMetadata(), sha256: Sha256 });
+      const request = await signer.sign({ method: 'POST', protocol: url.protocol, hostname: url.hostname,
+        path: url.pathname, headers: { host: url.host, 'content-type': 'application/json' }, body: payload });
+      headers = request.headers;
+    }
+    const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      headers,
+      body: payload,
       signal: controller.signal,
     });
     const text = await response.text();
@@ -75,7 +87,7 @@ async function postJson(path, body, timeoutMs = TIMEOUT_MS) {
  * }>}
  */
 function predictDmp({ nombre_potrero, geojson }) {
-  return postJson('/predict/dmp', { nombre_potrero, geojson });
+  return postJson('/predict/dmp', { nombre_potrero, geojson }, TIMEOUT_MS, process.env.MODEL_GATEWAY_URL);
 }
 
 /**
@@ -86,7 +98,7 @@ function predictDmp({ nombre_potrero, geojson }) {
  * }>}
  */
 function predictDmi({ animales }) {
-  return postJson('/predict/dmi', { animales });
+  return postJson('/predict/dmi', { animales }, TIMEOUT_MS, process.env.MODEL_GATEWAY_URL);
 }
 
 async function predictStock({ nombre_potrero, fecha, consumo_diario_total_kg_ms, geojson, dias_actualizacion }) {

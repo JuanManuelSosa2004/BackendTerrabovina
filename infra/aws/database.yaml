@@ -1,0 +1,129 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Isolated TerraBovina network and private MySQL database in Northern Virginia.
+Resources:
+  Network:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.87.0.0/20
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: terrabovina-aws}]
+  Internet:
+    Type: AWS::EC2::InternetGateway
+  Attach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: {VpcId: !Ref Network, InternetGatewayId: !Ref Internet}
+  AppSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties: {VpcId: !Ref Network, AvailabilityZone: !Select [0, !GetAZs ''], CidrBlock: 10.87.0.0/24}
+  AppSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties: {VpcId: !Ref Network, AvailabilityZone: !Select [1, !GetAZs ''], CidrBlock: 10.87.1.0/24}
+  DbSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties: {VpcId: !Ref Network, AvailabilityZone: !Select [0, !GetAZs ''], CidrBlock: 10.87.2.0/24}
+  DbSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties: {VpcId: !Ref Network, AvailabilityZone: !Select [1, !GetAZs ''], CidrBlock: 10.87.3.0/24}
+  EgressRoutes:
+    Type: AWS::EC2::RouteTable
+    Properties: {VpcId: !Ref Network}
+  DatabaseRoutes:
+    Type: AWS::EC2::RouteTable
+    Properties: {VpcId: !Ref Network}
+  Outbound:
+    Type: AWS::EC2::Route
+    DependsOn: Attach
+    Properties: {RouteTableId: !Ref EgressRoutes, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref Internet}
+  RouteAppA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref AppSubnetA, RouteTableId: !Ref EgressRoutes}
+  RouteAppB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref AppSubnetB, RouteTableId: !Ref EgressRoutes}
+  RouteDbA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref DbSubnetA, RouteTableId: !Ref DatabaseRoutes}
+  RouteDbB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref DbSubnetB, RouteTableId: !Ref DatabaseRoutes}
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Network
+      VpcEndpointType: Gateway
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      RouteTableIds: [!Ref EgressRoutes, !Ref DatabaseRoutes]
+  ApiLinkGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: {VpcId: !Ref Network, GroupDescription: API Gateway VPC link}
+  ApplicationGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Network
+      GroupDescription: Application traffic from API Gateway only
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 3000, ToPort: 3000, SourceSecurityGroupId: !Ref ApiLinkGroup}
+  DatabaseGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Network
+      GroupDescription: Private MySQL from the isolated app network
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !Ref ApplicationGroup}
+  DatabaseSubnets:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: TerraBovina isolated MySQL subnets
+      SubnetIds: [!Ref DbSubnetA, !Ref DbSubnetB]
+  DbParameters:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Family: mysql9.7
+      Description: Require TLS for every MySQL client
+      Parameters: {require_secure_transport: '1', event_scheduler: 'OFF'}
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: terrabovina-aws-db
+      DBName: terrabovina_aws
+      Engine: mysql
+      EngineVersion: 9.7.4
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: '20'
+      StorageType: gp3
+      StorageEncrypted: true
+      MultiAZ: false
+      BackupRetentionPeriod: 3
+      DeletionProtection: true
+      CopyTagsToSnapshot: true
+      PubliclyAccessible: false
+      MasterUsername: tb_admin
+      ManageMasterUserPassword: true
+      DBSubnetGroupName: !Ref DatabaseSubnets
+      DBParameterGroupName: !Ref DbParameters
+      VPCSecurityGroups: [!Ref DatabaseGroup]
+  AppPassword:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Password for the dedicated TerraBovina application database principal
+      GenerateSecretString: {PasswordLength: 40, ExcludePunctuation: true}
+  Jwt:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Signing key for TerraBovina AWS sessions only
+      GenerateSecretString: {PasswordLength: 64, ExcludePunctuation: true}
+Outputs:
+  Vpc: {Value: !Ref Network}
+  PublicA: {Value: !Ref AppSubnetA}
+  PublicB: {Value: !Ref AppSubnetB}
+  PrivateA: {Value: !Ref DbSubnetA}
+  PrivateB: {Value: !Ref DbSubnetB}
+  ApiGroup: {Value: !Ref ApiLinkGroup}
+  AppGroup: {Value: !Ref ApplicationGroup}
+  Host: {Value: !GetAtt Database.Endpoint.Address}
+  MasterSecret: {Value: !GetAtt Database.MasterUserSecret.SecretArn}
+  AppSecret: {Value: !Ref AppPassword}
+  JwtSecret: {Value: !Ref Jwt}

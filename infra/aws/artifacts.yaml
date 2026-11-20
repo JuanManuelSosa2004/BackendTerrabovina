@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private staging and container images for the independent TerraBovina deployment.
+Resources:
+  Staging:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireMigrationCopies
+            Status: Enabled
+            Prefix: migration/
+            ExpirationInDays: 7
+            AbortIncompleteMultipartUpload: {DaysAfterInitiation: 1}
+          - Id: ExpireBuildInputs
+            Status: Enabled
+            Prefix: builds/
+            ExpirationInDays: 30
+  SecureTransport:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Staging
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource: [!GetAtt Staging.Arn, !Sub '${Staging.Arn}/*']
+            Condition:
+              Bool: {aws:SecureTransport: 'false'}
+  BackendImages:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: terrabovina-aws/backend
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration: {EncryptionType: AES256}
+      ImageScanningConfiguration: {ScanOnPush: true}
+  ModelImages:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: terrabovina-aws/modelos
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration: {EncryptionType: AES256}
+      ImageScanningConfiguration: {ScanOnPush: true}
+Outputs:
+  StagingBucket:
+    Value: !Ref Staging
+  BackendRepository:
+    Value: !GetAtt BackendImages.RepositoryUri
+  ModelRepository:
+    Value: !GetAtt ModelImages.RepositoryUri

@@ -9,6 +9,11 @@ let transporter = null;
 // exigir SMTP_USER/SMTP_PASS en entornos (tests) que nunca lo usan.
 function getTransporter() {
   if (!transporter) {
+    if (process.env.MAIL_TRANSPORT === 'ses') {
+      const { SESv2Client, SendEmailCommand } = require('@aws-sdk/client-sesv2');
+      transporter = nodemailer.createTransport({ SES: { sesClient: new SESv2Client({ region: 'us-east-1' }), SendEmailCommand } });
+      return transporter;
+    }
     transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {

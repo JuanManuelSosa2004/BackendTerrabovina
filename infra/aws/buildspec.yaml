@@ -1,0 +1,19 @@
+version: 0.2
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+  build:
+    commands:
+      - |
+        set -eu
+        for component in backend modelos; do
+          repo="terrabovina-aws/$component"
+          image="$REGISTRY/$repo:$RELEASE_TAG"
+          if aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Already published $component at $RELEASE_TAG"
+            continue
+          fi
+          docker build --platform linux/amd64 -t "$image" "$component"
+          docker push "$image"
+        done

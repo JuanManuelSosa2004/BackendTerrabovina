@@ -13,8 +13,7 @@ const app = express();
 // pruebas manuales. CORS_ORIGINS (opcional, coma-separado) permite sumar
 // otros orígenes sin tocar código; FRONTEND_URL ya existía para el link
 // del mail de recuperación, se reutiliza acá con el mismo criterio.
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://pfi-front-production.up.railway.app',
+const DEFAULT_ALLOWED_ORIGINS = process.env.NODE_ENV === 'production' ? [] : [
   'http://localhost:3000',
   'http://localhost:5173',
 ];

@@ -1,4 +1,14 @@
 require('dotenv').config();
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
+
+if (process.env.NODE_ENV === 'production') {
+  const host = process.env.DB_HOST || '';
+  if (!/^terrabovina-aws-db\.[a-z0-9]+\.us-east-1\.rds\.amazonaws\.com$/.test(host) ||
+      process.env.DB_NAME !== 'terrabovina_aws' || !process.env.DB_PASSWORD || !process.env.DB_USER) {
+    throw new Error('El despliegue AWS requiere la base terrabovina_aws en su RDS dedicado de Virginia.');
+  }
+}
 
 const base = {
   username: process.env.DB_USER,
@@ -27,6 +37,13 @@ module.exports = {
   production: {
     ...base,
     database: process.env.DB_NAME,
+    dialectOptions: {
+      ssl: {
+        ca: readFileSync(join(__dirname, '../../../infra/aws/us-east-1-bundle.pem'), 'utf8'),
+        rejectUnauthorized: true,
+        verifyIdentity: true,
+      },
+    },
     logging: false,
   },
 };
