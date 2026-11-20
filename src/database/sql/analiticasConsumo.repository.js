@@ -77,19 +77,17 @@ async function getAnaliticasConsumo(id_estancia) {
   }));
 
   const ultimoStockPorPotrero = await sequelize.query(
-    `SELECT ranked.id_potrero, p.nombre, ranked.stock_final_total_kg_ms,
-            ranked.stock_final_central_kg_ms_ha, ranked.crecimiento_utilizable_kg_ms_ha_dia,
-            ranked.consumo_diario_kg_ms_ha
-     FROM (
-       SELECT es.*, ROW_NUMBER() OVER (
-         PARTITION BY es.id_potrero ORDER BY es.fecha_calculo DESC, es.id_estimacion_stock DESC
-       ) AS rn
-       FROM estimacion_stock es
-       JOIN potrero p2 ON p2.id_potrero = es.id_potrero
-       WHERE p2.id_estancia = :id_estancia AND p2.activo = TRUE
-     ) ranked
-     JOIN potrero p ON p.id_potrero = ranked.id_potrero
-     WHERE ranked.rn = 1`,
+    `SELECT p.id_potrero, p.nombre, es.stock_final_total_kg_ms,
+            es.stock_final_central_kg_ms_ha, es.crecimiento_utilizable_kg_ms_ha_dia,
+            es.consumo_diario_kg_ms_ha
+     FROM potrero p
+     JOIN estimacion_stock es ON es.id_estimacion_stock = (
+       SELECT ultima.id_estimacion_stock FROM estimacion_stock ultima
+       WHERE ultima.id_potrero = p.id_potrero
+       ORDER BY ultima.fecha_calculo DESC, ultima.id_estimacion_stock DESC
+       LIMIT 1
+     )
+     WHERE p.id_estancia = :id_estancia AND p.activo = TRUE`,
     { replacements: { id_estancia }, type: QueryTypes.SELECT }
   );
   const totalStock = ultimoStockPorPotrero.reduce((sum, row) => sum + Number(row.stock_final_total_kg_ms), 0);
@@ -105,7 +103,8 @@ async function getAnaliticasConsumo(id_estancia) {
 
   const evolucionStock7diasRaw = await sequelize.query(
     `WITH ultimos AS (
-       SELECT es.*, ROW_NUMBER() OVER (
+       SELECT es.fecha_objetivo, es.stock_final_total_kg_ms, es.stock_final_central_kg_ms_ha,
+              ROW_NUMBER() OVER (
          PARTITION BY es.id_potrero, es.fecha_objetivo
          ORDER BY es.fecha_calculo DESC, es.id_estimacion_stock DESC
        ) AS rn

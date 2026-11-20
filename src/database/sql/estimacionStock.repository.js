@@ -33,11 +33,27 @@ async function getUltimaByPotrero(id_potrero, transaction) {
   return normalizeRow(rows[0]);
 }
 
-async function getHistoricoByPotrero(id_potrero, { desde, hasta } = {}) {
+async function getHistoricoByPotrero(id_potrero, { desde, hasta, vista } = {}) {
   const conditions = ['id_potrero = :id_potrero'];
   const replacements = { id_potrero };
   if (desde) { conditions.push('fecha_objetivo >= :desde'); replacements.desde = desde; }
   if (hasta) { conditions.push('fecha_objetivo <= :hasta'); replacements.hasta = hasta; }
+  if (vista === 'grafico') {
+    // The chart shows the last usable revision per target day, including zero.
+    return sequelize.query(
+      `WITH revisiones AS (
+         SELECT id_estimacion_stock, fecha_objetivo, fecha_calculo, stock_final_central_kg_ms_ha,
+                ROW_NUMBER() OVER (
+                  PARTITION BY fecha_objetivo ORDER BY fecha_calculo DESC, id_estimacion_stock DESC
+                ) AS orden
+         FROM estimacion_stock
+         WHERE ${conditions.join(' AND ')} AND stock_final_central_kg_ms_ha >= 0
+       )
+       SELECT id_estimacion_stock, fecha_objetivo, fecha_calculo, stock_final_central_kg_ms_ha
+       FROM revisiones WHERE orden = 1 ORDER BY fecha_objetivo ASC`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+  }
   const rows = await sequelize.query(
     `SELECT ${SELECT_FIELDS} FROM estimacion_stock WHERE ${conditions.join(' AND ')}
      ORDER BY fecha_objetivo DESC, id_estimacion_stock DESC`,

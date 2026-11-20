@@ -875,6 +875,10 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/potreroId"
+        - in: query
+          name: vista
+          schema: { type: string, enum: [grafico] }
+          description: Devuelve solo el último saldo válido por fecha objetivo y los campos del gráfico. Al omitirlo se conserva el histórico detallado.
       responses:
         "200":
           description: Serie de estimaciones, posiblemente vacía
